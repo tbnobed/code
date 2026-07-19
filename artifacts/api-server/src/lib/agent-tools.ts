@@ -106,7 +106,21 @@ export async function executeTool(
   try {
     switch (name) {
       case "create_file": {
-        const p = await resolveInWorkspace(workspaceDir, String(args.path));
+        const rel = String(args.path ?? "").trim();
+        const p = await resolveInWorkspace(workspaceDir, rel);
+        if (!rel || rel === "." || path.resolve(p) === path.resolve(workspaceDir)) {
+          return {
+            result: `Invalid path "${args.path}": provide a file path relative to the workspace root, e.g. "index.html"`,
+            isError: true,
+          };
+        }
+        const existing = await fs.stat(p).catch(() => null);
+        if (existing?.isDirectory()) {
+          return {
+            result: `"${rel}" is a directory; provide a file path, e.g. "${rel}/index.html"`,
+            isError: true,
+          };
+        }
         await fs.mkdir(path.dirname(p), { recursive: true });
         await fs.writeFile(p, String(args.content ?? ""), "utf8");
         return { result: `Created ${args.path}`, isError: false };
