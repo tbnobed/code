@@ -255,6 +255,11 @@ router.get("/sessions/:id/checkpoints", async (req, res) => {
   const session = await getSessionOr404(req, res);
   if (!session) return;
   try {
+    // Opportunistic heal: legacy repos without a root commit get their
+    // baseline here, so the tab works without needing a turn first.
+    await ensureRepo(session.workspacePath).catch((err) => {
+      req.log.warn({ err }, "checkpoint heal failed");
+    });
     res.json(await listCheckpoints(session.workspacePath));
   } catch (err) {
     req.log.error({ err }, "checkpoint list failed");

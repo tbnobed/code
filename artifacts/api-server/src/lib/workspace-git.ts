@@ -7,8 +7,26 @@ const run = promisify(execFile);
 
 const HASH_RE = /^[0-9a-f]{7,40}$/i;
 
+// Checkpoint commits must never depend on host-level git config: containers
+// frequently run without a writable HOME, so `git config --global` at boot
+// can fail — and then every commit dies with "tell me who you are" while the
+// callers swallow it as a warning. Identity is therefore injected per call.
+const GIT_IDENTITY = process.env.GIT_USER_NAME ?? "Forge Agent";
+const GIT_EMAIL = process.env.GIT_USER_EMAIL ?? "forge-agent@localhost";
+const GIT_ENV = {
+  GIT_AUTHOR_NAME: GIT_IDENTITY,
+  GIT_AUTHOR_EMAIL: GIT_EMAIL,
+  GIT_COMMITTER_NAME: GIT_IDENTITY,
+  GIT_COMMITTER_EMAIL: GIT_EMAIL,
+  GIT_TERMINAL_PROMPT: "0", // never hang a server call on a credential prompt
+  LC_ALL: "C", // force English git messages — the error-classification regexes depend on them
+};
+
 function git(dir: string, args: string[], maxBuffer = 10 * 1024 * 1024) {
-  return run("git", ["-C", dir, ...args], { maxBuffer });
+  return run("git", ["-C", dir, ...args], {
+    maxBuffer,
+    env: { ...process.env, ...GIT_ENV },
+  });
 }
 
 /** Initialize the workspace checkpoint repo if missing; safe to call repeatedly. */
@@ -80,13 +98,24 @@ export async function listCheckpoints(dir: string): Promise<Checkpoint[]> {
   } catch {
     return [];
   }
-  const { stdout } = await git(dir, [
-    "log",
-    "-n",
-    "50",
-    "--shortstat",
-    "--pretty=format:@@%H%x09%ct%x09%s",
-  ]);
+  let stdout: string;
+  try {
+    ({ stdout } = await git(dir, [
+      "log",
+      "-n",
+      "50",
+      "--shortstat",
+      "--pretty=format:@@%H%x09%ct%x09%s",
+    ]));
+  } catch (err) {
+    // A repo with no commits yet (unborn HEAD) has nothing to list — that is
+    // an empty timeline, not a server error.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/does not have any commits|bad default revision|unknown revision|ambiguous argument/i.test(msg)) {
+      return [];
+    }
+    throw err;
+  }
   const out: Checkpoint[] = [];
   for (const line of stdout.split("\n")) {
     if (line.startsWith("@@")) {

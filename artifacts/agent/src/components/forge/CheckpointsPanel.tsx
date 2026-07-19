@@ -21,13 +21,14 @@ interface CheckpointsPanelProps {
 
 export default function CheckpointsPanel({ sessionId, onReverted }: CheckpointsPanelProps) {
   const base = import.meta.env.BASE_URL;
-  const { data: checkpoints, isLoading } = useQuery<Checkpoint[]>({
+  const { data: checkpoints, isLoading, isError, refetch } = useQuery<Checkpoint[]>({
     queryKey: ["checkpoints", sessionId],
     queryFn: async () => {
       const r = await fetch(`${base}api/sessions/${sessionId}/checkpoints`, { credentials: "include" });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json();
     },
+    retry: 1, // settle fast on server errors instead of spinning through retries
   });
 
   const [diffFor, setDiffFor] = useState<Checkpoint | null>(null);
@@ -86,6 +87,21 @@ export default function CheckpointsPanel({ sessionId, onReverted }: CheckpointsP
           {isLoading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : isError ? (
+            <div className="px-4 py-8 text-center border border-dashed border-destructive/40 rounded-sm m-2">
+              <p className="text-xs font-mono text-destructive">CHECKPOINTS UNAVAILABLE</p>
+              <p className="text-[10px] font-mono text-muted-foreground/60 mt-1">
+                The server could not read this session checkpoint history.
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2 h-6 px-2 font-mono text-[9px] tracking-widest text-muted-foreground hover:text-primary"
+                onClick={() => refetch()}
+              >
+                RETRY
+              </Button>
             </div>
           ) : !checkpoints?.length ? (
             <div className="px-4 py-8 text-center border border-dashed border-border rounded-sm m-2">
