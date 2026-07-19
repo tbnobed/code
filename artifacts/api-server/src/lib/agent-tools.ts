@@ -79,8 +79,19 @@ export const toolDefinitions: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 
 const MAX_OUTPUT = 16_000;
 
-function truncate(s: string) {
-  return s.length > MAX_OUTPUT ? s.slice(0, MAX_OUTPUT) + "\n...[truncated]" : s;
+/** Redact known secrets (e.g. the GitHub token) from tool output. */
+function redactSecrets(s: string): string {
+  const token = process.env.GITHUB_TOKEN;
+  if (token && token.length >= 8) {
+    s = s.split(token).join("[REDACTED_GITHUB_TOKEN]");
+  }
+  return s;
+}
+
+/** Redact first (so truncation can never split a secret), then truncate. */
+function sanitize(s: string) {
+  const clean = redactSecrets(s);
+  return clean.length > MAX_OUTPUT ? clean.slice(0, MAX_OUTPUT) + "\n...[truncated]" : clean;
 }
 
 async function listFilesRecursive(dir: string, base: string): Promise<string[]> {
@@ -145,7 +156,7 @@ export async function executeTool(
       case "read_file": {
         const p = await resolveInWorkspace(workspaceDir, String(args.path));
         const content = await fs.readFile(p, "utf8");
-        return { result: truncate(content), isError: false };
+        return { result: sanitize(content), isError: false };
       }
       case "list_files": {
         const files = await listFilesRecursive(workspaceDir, workspaceDir);
@@ -165,7 +176,7 @@ export async function executeTool(
               if (stderr) parts.push(`[stderr]\n${stderr}`);
               if (error && error.code !== 0) parts.push(`[exit code: ${error.code ?? "killed"}]`);
               resolve({
-                result: truncate(parts.join("\n") || "(no output)"),
+                result: sanitize(parts.join("\n") || "(no output)"),
                 isError: Boolean(error),
               });
             },
@@ -176,6 +187,6 @@ export async function executeTool(
         return { result: `Unknown tool: ${name}`, isError: true };
     }
   } catch (err) {
-    return { result: err instanceof Error ? err.message : String(err), isError: true };
+    return { result: sanitize(err instanceof Error ? err.message : String(err)), isError: true };
   }
 }

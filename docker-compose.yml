@@ -13,6 +13,11 @@ services:
       # Ollama runs on the DGX host, outside this container
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3-coder-next}
+      # Optional: enables the agent's GitHub push/pull sync (fine-grained PAT
+      # with Contents read/write on the repos you want it to touch)
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GIT_USER_NAME: ${GIT_USER_NAME:-}
+      GIT_USER_EMAIL: ${GIT_USER_EMAIL:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

@@ -22,6 +22,11 @@ FROM node:22-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
+# git + curl for the agent's GitHub push/pull sync (and general tooling)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 # Bundled server (esbuild output is self-contained)
 COPY --from=build /app/artifacts/api-server/dist ./dist
 # Built frontend, served by the API server from the same origin
@@ -34,6 +39,8 @@ RUN useradd -m forge \
  && chown -R forge:forge /app /data
 USER forge
 
+# Explicit HOME so `git config --global` resolves deterministically
+ENV HOME=/home/forge
 ENV PORT=3000 \
     STATIC_DIR=/app/public \
     AGENT_WORKSPACES_DIR=/data/workspaces

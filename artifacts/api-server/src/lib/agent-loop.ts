@@ -3,6 +3,7 @@ import { eq, asc, sql } from "drizzle-orm";
 import { db, sessionsTable, messagesTable, type Session } from "@workspace/db";
 import { ollama } from "./ollama";
 import { toolDefinitions, executeTool } from "./agent-tools";
+import { githubEnabled } from "./git-setup";
 
 const SYSTEM_PROMPT = `You are Forge, an autonomous coding agent running locally. You help the user build software by creating files, editing them, and running commands inside a sandboxed workspace directory.
 
@@ -12,7 +13,16 @@ Guidelines:
 - File paths are always relative to the workspace root.
 - After finishing, summarize what you built and how to use it.
 - If a command fails, read the error and fix the problem before giving up.
-- Never restate your plan or repeat text from earlier in the conversation. After a tool result, continue directly from where you left off with the next action.`;
+- Never restate your plan or repeat text from earlier in the conversation. After a tool result, continue directly from where you left off with the next action.`
+  + (githubEnabled
+    ? `
+
+GitHub access:
+- git is installed and HTTPS GitHub remotes are pre-authenticated via a credential helper. Use run_command for git: clone, pull, add, commit, push.
+- Always use plain https://github.com/<owner>/<repo>.git URLs. NEVER embed tokens or credentials in URLs or files.
+- To create a new repository, call the GitHub API: curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/user/repos -d '{"name":"<repo>","private":true}' — then add it as a remote and push.
+- Never print, echo, or write the GITHUB_TOKEN value anywhere.`
+    : "");
 
 const MAX_ITERATIONS = 25;
 
@@ -89,7 +99,16 @@ export async function runAgentTurn(session: Session, userContent: string, send: 
         const last = toolCallsAcc[toolCallsAcc.length - 1];
         const isNewCall =
           (tc.id && last && last.id && tc.id !== last.id) ||
-          (tc.function?.name && last && last.name && last.args && isCompleteJson(last.args));
+          // Name-based split only when the previous call is unambiguously
+          // finished (complete JSON args) and this delta opens a call
+          // (name without argument continuation).
+          (tc.function?.name &&
+            !tc.function?.arguments &&
+            !tc.id &&
+            last &&
+            last.name &&
+            last.args &&
+            isCompleteJson(last.args));
         if (isNewCall && idx < toolCallsAcc.length) {
           idx = toolCallsAcc.length;
         }

@@ -1,12 +1,14 @@
 import app from "./app";
 import { seedAdminUser } from "./lib/auth";
 import { ensureSchema } from "./lib/schema-init";
+import { setupGit } from "./lib/git-setup";
 import { logger } from "./lib/logger";
 
 // Apply the schema (idempotent) and seed the admin account before accepting
 // traffic — this also migrates existing databases on updated builds.
 await ensureSchema();
 await seedAdminUser();
+await setupGit();
 
 const rawPort = process.env["PORT"];
 
