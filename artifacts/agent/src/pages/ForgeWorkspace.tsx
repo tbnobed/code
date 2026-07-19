@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useGetSession, useListWorkspaceFiles, useReadWorkspaceFile } from "@workspace/api-client-react";
-import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight } from "lucide-react";
+import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, MessageSquare } from "lucide-react";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,10 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
       queryClient.invalidateQueries({ queryKey: getListWorkspaceFilesQueryKey(sessionId) });
     }
   });
+
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewKey, setPreviewKey] = useState(0);
+  const previewUrl = `${import.meta.env.BASE_URL}api/sessions/${sessionId}/preview/`;
 
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const readFile = useReadWorkspaceFile();
@@ -162,7 +166,16 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
             {sessionData.model}
           </Badge>
         </div>
-        <div className="text-xs font-mono text-muted-foreground flex gap-4">
+        <div className="text-xs font-mono text-muted-foreground flex gap-4 items-center">
+          <Button
+            variant={showPreview ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowPreview((v) => !v)}
+            className="h-7 font-mono tracking-widest text-[10px] rounded-sm px-3 gap-1.5"
+          >
+            {showPreview ? <MessageSquare className="w-3.5 h-3.5" /> : <Globe className="w-3.5 h-3.5" />}
+            {showPreview ? "CONSOLE" : "PREVIEW"}
+          </Button>
           <span className="flex items-center gap-1.5"><HardDrive className="w-3.5 h-3.5" /> WORKSPACE MOUNTED</span>
           <span>//</span>
           <span>{formatDate(sessionData.updatedAt)}</span>
@@ -170,8 +183,34 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
       </div>
 
       <div className="flex-1 flex overflow-hidden">
+        {/* Live Site Preview */}
+        {showPreview && (
+          <div className="flex-1 flex flex-col border-r border-border bg-background min-w-[400px]">
+            <div className="h-9 border-b border-border bg-muted/50 flex items-center justify-between px-3 shrink-0">
+              <span className="font-mono text-[10px] font-bold tracking-widest text-muted-foreground flex items-center gap-2">
+                <Globe className="w-3.5 h-3.5 text-primary" /> LIVE_PREVIEW
+              </span>
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon" className="w-6 h-6" title="Reload preview" onClick={() => setPreviewKey((k) => k + 1)}>
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </Button>
+                <Button variant="ghost" size="icon" className="w-6 h-6" title="Open in new tab" onClick={() => window.open(previewUrl, "_blank")}>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+            <iframe
+              key={previewKey}
+              src={previewUrl}
+              title="Workspace preview"
+              sandbox="allow-scripts allow-forms"
+              className="flex-1 w-full bg-white"
+            />
+          </div>
+        )}
+
         {/* Main Chat Area */}
-        <div className="flex-1 flex flex-col border-r border-border bg-background min-w-[400px]">
+        <div className={cn("flex-1 flex-col border-r border-border bg-background min-w-[400px]", showPreview ? "hidden" : "flex")}>
           <ScrollArea ref={chatScrollRef} className="flex-1 p-6">
             <div className="space-y-6 max-w-3xl mx-auto pb-12">
               
