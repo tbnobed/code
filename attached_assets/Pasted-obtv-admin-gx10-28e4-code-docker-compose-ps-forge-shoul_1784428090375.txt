@@ -1,0 +1,13 @@
+obtv-admin@gx10-28e4:~/code$ docker compose ps            # forge should turn "healthy" after a few seconds
+docker compose logs -f forge # should show "Server listening" on port 3000
+NAME           IMAGE                COMMAND                  SERVICE   CREATED              STATUS                        PORTS
+code-db-1      postgres:17-alpine   "docker-entrypoint.s…"   db        About a minute ago   Up About a minute (healthy)   5432/tcp
+code-forge-1   code-forge           "docker-entrypoint.s…"   forge     About a minute ago   Up About a minute (healthy)   0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+forge-1  | {"level":30,"time":1784427968293,"pid":1,"hostname":"c95d31422686","port":3000,"msg":"Server listening"}
+forge-1  | {"level":30,"time":1784427983015,"pid":1,"hostname":"c95d31422686","req":{"id":1,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":2,"msg":"request completed"}
+forge-1  | {"level":30,"time":1784427998104,"pid":1,"hostname":"c95d31422686","req":{"id":2,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":2,"msg":"request completed"}
+forge-1  | {"level":30,"time":1784428013183,"pid":1,"hostname":"c95d31422686","req":{"id":3,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":2,"msg":"request completed"}
+forge-1  | {"level":30,"time":1784428028254,"pid":1,"hostname":"c95d31422686","req":{"id":4,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":1,"msg":"request completed"}
+forge-1  | {"level":30,"time":1784428043332,"pid":1,"hostname":"c95d31422686","req":{"id":5,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":1,"msg":"request completed"}
+forge-1  | {"level":30,"time":1784428058433,"pid":1,"hostname":"c95d31422686","req":{"id":6,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":1,"msg":"request completed"}
+forge-1  | {"level":30,"time":1784428073505,"pid":1,"hostname":"c95d31422686","req":{"id":7,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":1,"msg":"request completed"}
