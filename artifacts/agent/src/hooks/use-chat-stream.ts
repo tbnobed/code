@@ -156,7 +156,22 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
         // Stopped by user or unmount — stopStream already reset the UI state.
       } else if (abortControllerRef.current === ac) {
         console.error('Stream error:', err);
-        setError(err.message || 'An error occurred during chat');
+        const msg: string = err?.message || "";
+        const transportDrop = /network ?error|failed to fetch|load failed|fetch failed|connection|terminated|socket/i.test(msg);
+        setError(
+          transportDrop
+            ? `Connection to the server dropped mid-turn (${msg || "network error"}). Progress up to the drop is saved. If this repeats: check docker compose logs forge, and keep models warm with OLLAMA_KEEP_ALIVE on the Ollama host — cold loads stall streams for minutes.`
+            : msg || "An error occurred during chat",
+        );
+        // Show whatever the turn persisted before the connection died.
+        onDoneRef.current?.();
+        if (transportDrop) {
+          // The server persists the partial turn + checkpoint AFTER it sees
+          // the socket drop, so a single immediate refresh can race it —
+          // refresh again like the stop path does.
+          setTimeout(() => onDoneRef.current?.(), 400);
+          setTimeout(() => onDoneRef.current?.(), 1500);
+        }
       }
     } finally {
       // Only the still-active request may clear shared state: a stopped

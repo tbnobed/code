@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS "messages" (
   "content" text NOT NULL DEFAULT '',
   "tool_calls" text,
   "tool_call_id" text,
+  "mode" text,
   "created_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 

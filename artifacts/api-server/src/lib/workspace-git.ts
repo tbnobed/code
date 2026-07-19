@@ -11,8 +11,11 @@ const HASH_RE = /^[0-9a-f]{7,40}$/i;
 // frequently run without a writable HOME, so `git config --global` at boot
 // can fail — and then every commit dies with "tell me who you are" while the
 // callers swallow it as a warning. Identity is therefore injected per call.
-const GIT_IDENTITY = process.env.GIT_USER_NAME ?? "Forge Agent";
-const GIT_EMAIL = process.env.GIT_USER_EMAIL ?? "forge-agent@localhost";
+// NB: compose passes `${GIT_USER_NAME:-}` — set but EMPTY. `??` would keep
+// the empty string and git dies with "empty ident name (for <>) not allowed",
+// so blank counts as unset here.
+const GIT_IDENTITY = (process.env.GIT_USER_NAME || "").trim() || "Forge Agent";
+const GIT_EMAIL = (process.env.GIT_USER_EMAIL || "").trim() || "forge-agent@localhost";
 const GIT_ENV = {
   GIT_AUTHOR_NAME: GIT_IDENTITY,
   GIT_AUTHOR_EMAIL: GIT_EMAIL,

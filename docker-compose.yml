@@ -15,6 +15,11 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3-coder-next}
       OLLAMA_ARCHITECT_MODEL: ${OLLAMA_ARCHITECT_MODEL:-qwen3-next:80b-a3b-thinking}
       OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-qwen2.5vl}
+      # Tip (set on the OLLAMA HOST service, not here): OLLAMA_KEEP_ALIVE=2h
+      # keeps models resident between turns. Ollama's default unloads after
+      # 5 idle minutes, so the first message after a break stalls through a
+      # multi-minute cold load — exactly the silent stretch that flaky
+      # networks and proxies kill, surfacing as "network error" in the UI.
       # Optional: "Send for review" (Claude). Feature stays hidden when unset.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}

@@ -48,8 +48,11 @@ export async function ensureSchema(): Promise<void> {
       "content" text NOT NULL DEFAULT '',
       "tool_calls" text,
       "tool_call_id" text,
+      "mode" text,
       "created_at" timestamp with time zone NOT NULL DEFAULT now()
     );
+    -- 'architect' for architect-turn responses; null for normal turns.
+    ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "mode" text;
 
     CREATE TABLE IF NOT EXISTS "user_sessions" (
       "sid" varchar NOT NULL COLLATE "default",

@@ -32,8 +32,10 @@ export async function setupGit() {
 async function configureGit() {
   const config: [string, string][] = [
     ["init.defaultBranch", "main"],
-    ["user.name", process.env.GIT_USER_NAME ?? "Forge Agent"],
-    ["user.email", process.env.GIT_USER_EMAIL ?? "forge-agent@localhost"],
+    // Blank env (compose `${VAR:-}`) must not write an empty ident into
+    // global config — that poisons every git commit in the container.
+    ["user.name", (process.env.GIT_USER_NAME || "").trim() || "Forge Agent"],
+    ["user.email", (process.env.GIT_USER_EMAIL || "").trim() || "forge-agent@localhost"],
     // Never prompt for credentials interactively (would hang run_command)
     ["core.askPass", ""],
   ];

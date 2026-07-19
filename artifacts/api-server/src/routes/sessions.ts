@@ -187,6 +187,14 @@ router.post("/sessions/:id/chat", async (req, res) => {
     if (res.writableEnded || res.destroyed) return;
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
+  // Heartbeat: long silent stretches (Ollama cold loads, long tool runs)
+  // get idle-killed by middleboxes, surfacing as a bare "network error" in
+  // the browser. SSE comment lines keep the pipe warm; clients ignore them.
+  const heartbeat = setInterval(() => {
+    if (res.writableEnded || res.destroyed) return;
+    res.write(": hb\n\n");
+  }, 10_000);
+  res.on("close", () => clearInterval(heartbeat));
 
   // Checkpoint any manual changes (uploads, editor saves, terminal work)
   // separately, so each turn's diff is purely the agent's doing.
@@ -243,6 +251,14 @@ router.post("/sessions/:id/review", async (req, res) => {
     if (res.writableEnded || res.destroyed) return;
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
+  // Heartbeat: long silent stretches (Ollama cold loads, long tool runs)
+  // get idle-killed by middleboxes, surfacing as a bare "network error" in
+  // the browser. SSE comment lines keep the pipe warm; clients ignore them.
+  const heartbeat = setInterval(() => {
+    if (res.writableEnded || res.destroyed) return;
+    res.write(": hb\n\n");
+  }, 10_000);
+  res.on("close", () => clearInterval(heartbeat));
 
   // Fold any manual edits into a checkpoint so the review sees them too.
   try {
@@ -371,6 +387,14 @@ router.post("/sessions/:id/exec", async (req, res) => {
     if (res.writableEnded || res.destroyed) return;
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
+  // Heartbeat: long silent stretches (Ollama cold loads, long tool runs)
+  // get idle-killed by middleboxes, surfacing as a bare "network error" in
+  // the browser. SSE comment lines keep the pipe warm; clients ignore them.
+  const heartbeat = setInterval(() => {
+    if (res.writableEnded || res.destroyed) return;
+    res.write(": hb\n\n");
+  }, 10_000);
+  res.on("close", () => clearInterval(heartbeat));
 
   await fs.mkdir(session.workspacePath, { recursive: true });
   const child = spawn("/bin/bash", ["-c", command], {
