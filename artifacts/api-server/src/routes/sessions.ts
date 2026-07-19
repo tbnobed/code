@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, raw, type IRouter } from "express";
 import { eq, desc, asc } from "drizzle-orm";
 import { db, sessionsTable, messagesTable } from "@workspace/db";
 import fs from "node:fs/promises";
@@ -179,6 +179,44 @@ router.get("/sessions/:id/files", async (req, res) => {
 
   res.json(await walk(session.workspacePath));
 });
+
+// Upload a file into the workspace root. Raw body (any content type, files
+// are opaque bytes); the file name travels in the URL so no multipart parser
+// is needed. esbuild-friendly: static imports only.
+router.put(
+  "/sessions/:id/files/:name",
+  raw({ type: () => true, limit: "25mb" }),
+  async (req, res) => {
+    const session = await getSessionOr404(req.params.id, res);
+    if (!session) return;
+    if (!Buffer.isBuffer(req.body)) {
+      return res.status(400).json({ error: "Expected a raw file body" });
+    }
+    // Flatten to a bare file name: no directories, no traversal. Reject
+    // control characters (they'd leak into prompts/logs) and absurd lengths.
+    const name = path.basename(req.params.name).trim();
+    if (
+      !name ||
+      name === "." ||
+      name === ".." ||
+      name.length > 255 ||
+      /[\x00-\x1f\x7f]/.test(name)
+    ) {
+      return res.status(400).json({ error: "Invalid file name" });
+    }
+    try {
+      // Self-heal: workspace dirs live under /tmp in dev and can vanish
+      // across host restarts; recreate before resolving.
+      await fs.mkdir(session.workspacePath, { recursive: true });
+      const full = await resolveInWorkspace(session.workspacePath, name);
+      await fs.writeFile(full, req.body);
+      return res.status(201).json({ name, size: req.body.length });
+    } catch (err) {
+      req.log?.error({ err }, "file upload failed");
+      return res.status(400).json({ error: "Could not save file" });
+    }
+  },
+);
 
 // Issue a signed preview token (requires login); the preview routes
 // themselves are cookie-free because the sandboxed iframe drops cookies.

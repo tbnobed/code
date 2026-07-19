@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useGetSession, useListWorkspaceFiles, useReadWorkspaceFile } from "@workspace/api-client-react";
-import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download } from "lucide-react";
+import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download, Paperclip, Upload, X } from "lucide-react";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,82 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
   useEffect(() => () => {
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
   }, []);
+
+  // File uploads: land in the session workspace so the agent can read them.
+  const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
+  // Counter, not boolean: overlapping batches (drop while picker uploads
+  // run) must not clear the busy state early.
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const isUploading = uploadingCount > 0;
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
+
+  const uploadFiles = useCallback(async (fileList: FileList | File[]) => {
+    const all = Array.from(fileList);
+    if (!all.length) return;
+    setUploadError(null);
+    const tooBig = all.filter((f) => f.size > MAX_UPLOAD_BYTES);
+    const candidates = all.filter((f) => f.size <= MAX_UPLOAD_BYTES);
+    const failed: string[] = tooBig.map((f) => `${f.name} (over 25MB)`);
+    const uploaded: string[] = [];
+    const putOne = async (file: File) => {
+      try {
+        const res = await fetch(
+          `${import.meta.env.BASE_URL}api/sessions/${sessionId}/files/${encodeURIComponent(file.name)}`,
+          {
+            method: "PUT",
+            credentials: "include",
+            headers: { "Content-Type": "application/octet-stream" },
+            body: file,
+          },
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        uploaded.push(file.name);
+      } catch {
+        failed.push(file.name);
+      }
+    };
+    setUploadingCount((c) => c + 1);
+    try {
+      // Bounded concurrency: the server buffers each body in memory, so
+      // don't fire 50 parallel 25MB PUTs when a folder gets dropped.
+      const queue = [...candidates];
+      await Promise.all(
+        Array.from({ length: Math.min(3, queue.length) }, async () => {
+          for (let f = queue.shift(); f; f = queue.shift()) await putOne(f);
+        }),
+      );
+    } finally {
+      setUploadingCount((c) => c - 1);
+    }
+    if (uploaded.length) {
+      setAttachedFiles((prev) => [...prev, ...uploaded.filter((n) => !prev.includes(n))]);
+      queryClient.invalidateQueries({ queryKey: getListWorkspaceFilesQueryKey(sessionId) });
+    }
+    if (failed.length) setUploadError(`Failed to upload: ${failed.join(", ")}`);
+  }, [sessionId, queryClient]);
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer?.types?.includes("Files")) {
+      dragCounter.current++;
+      setIsDragging(true);
+    }
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current = Math.max(0, dragCounter.current - 1);
+    if (dragCounter.current === 0) setIsDragging(false);
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current = 0;
+    setIsDragging(false);
+    if (e.dataTransfer?.files?.length) uploadFiles(e.dataTransfer.files);
+  };
 
   const WRITE_TOOLS = ["create_file", "edit_file", "run_command"];
   const { sendChat, isStreaming, streamingText, activeToolCall, error } = useChatStream({
@@ -104,12 +180,17 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isStreaming) return;
-    
-    // Optimistic update could go here if we had a full query cache setup, 
-    // but the streaming hook gives us good enough UI feedback
-    const messageContent = input;
+    const trimmed = input.trim();
+    // Block send mid-upload so the attachment note never misses in-flight files.
+    if ((!trimmed && attachedFiles.length === 0) || isStreaming || isUploading) return;
+
+    // Mention freshly uploaded files so the agent knows to look for them.
+    const attachNote = attachedFiles.length
+      ? `[Uploaded to the workspace: ${attachedFiles.join(", ")}]`
+      : "";
+    const messageContent = [attachNote, trimmed].filter(Boolean).join("\n\n");
     setInput("");
+    setAttachedFiles([]);
     sendChat(messageContent);
   };
 
@@ -251,7 +332,20 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
         )}
 
         {/* Main Chat Area */}
-        <div className={cn("flex-1 flex flex-col border-r border-border bg-background", showPreview ? "min-w-[320px]" : "min-w-[400px]")}>
+        <div
+          className={cn("flex-1 flex flex-col border-r border-border bg-background relative", showPreview ? "min-w-[320px]" : "min-w-[400px]")}
+          onDragEnter={handleDragEnter}
+          onDragOver={(e) => e.preventDefault()}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {isDragging && (
+            <div className="absolute inset-0 z-30 bg-background/90 border-2 border-dashed border-primary rounded-sm m-2 flex flex-col items-center justify-center gap-3 pointer-events-none">
+              <Upload className="w-10 h-10 text-primary" />
+              <p className="font-mono text-sm font-bold tracking-widest text-primary">DROP FILES TO UPLOAD</p>
+              <p className="font-mono text-[10px] text-muted-foreground">Files land in the session workspace for the agent to use</p>
+            </div>
+          )}
           <ScrollArea ref={chatScrollRef} className="flex-1 p-6">
             <div className="space-y-6 max-w-3xl mx-auto pb-12">
               
@@ -357,27 +451,78 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
 
           {/* Input Area */}
           <div className="p-4 bg-card border-t border-border shrink-0">
+            {(attachedFiles.length > 0 || uploadError) && (
+              <div className="max-w-3xl mx-auto mb-2 space-y-1.5">
+                {attachedFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 items-center">
+                    {attachedFiles.map((name) => (
+                      <span key={name} className="inline-flex items-center gap-1.5 bg-primary/10 border border-primary/30 text-foreground rounded-sm px-2 py-1 text-[10px] font-mono">
+                        <Paperclip className="w-3 h-3 text-primary" />
+                        {name}
+                        <button
+                          type="button"
+                          title="Don't mention in next message (file stays in workspace)"
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          onClick={() => setAttachedFiles((p) => p.filter((n) => n !== name))}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                    <span className="text-[9px] font-mono text-muted-foreground tracking-wider">IN WORKSPACE — WILL BE MENTIONED TO AGENT</span>
+                  </div>
+                )}
+                {uploadError && (
+                  <p className="text-[10px] font-mono text-destructive flex items-center gap-1.5">
+                    <AlertCircle className="w-3 h-3 shrink-0" /> {uploadError}
+                  </p>
+                )}
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="max-w-3xl mx-auto relative group">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.length) uploadFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
               <div className="absolute left-3 top-3 text-muted-foreground group-focus-within:text-primary transition-colors">
                 <ChevronRight className="w-5 h-5" />
               </div>
               <Input 
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                placeholder="Command sequence or natural language instruction..."
-                className="w-full pl-10 pr-24 py-6 bg-background border-2 border-input focus-visible:border-primary focus-visible:ring-0 rounded-sm font-mono text-sm shadow-sm transition-all"
+                placeholder={attachedFiles.length ? "What should I do with these files?" : "Command sequence or natural language instruction..."}
+                className="w-full pl-10 pr-36 py-6 bg-background border-2 border-input focus-visible:border-primary focus-visible:ring-0 rounded-sm font-mono text-sm shadow-sm transition-all"
                 disabled={isStreaming}
                 autoFocus
               />
-              <Button 
-                type="submit" 
-                size="sm"
-                disabled={!input.trim() || isStreaming}
-                className="absolute right-2 top-2 h-8 font-mono tracking-widest text-[10px] bg-primary text-primary-foreground hover:bg-primary/90 rounded-sm px-4"
-              >
-                {isStreaming ? "PROCESSING" : "SUBMIT"}
-                {!isStreaming && <Send className="w-3 h-3 ml-2 -mr-1" />}
-              </Button>
+              <div className="absolute right-2 top-2 flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  title="Upload files to workspace"
+                  disabled={isUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-8 w-8 rounded-sm text-muted-foreground hover:text-primary"
+                >
+                  {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+                </Button>
+                <Button 
+                  type="submit" 
+                  size="sm"
+                  disabled={(!input.trim() && !attachedFiles.length) || isStreaming || isUploading}
+                  className="h-8 font-mono tracking-widest text-[10px] bg-primary text-primary-foreground hover:bg-primary/90 rounded-sm px-4"
+                >
+                  {isStreaming ? "PROCESSING" : isUploading ? "UPLOADING" : "SUBMIT"}
+                  {!isStreaming && !isUploading && <Send className="w-3 h-3 ml-2 -mr-1" />}
+                </Button>
+              </div>
             </form>
           </div>
         </div>
@@ -438,7 +583,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
               {!files?.length ? (
                 <div className="px-4 py-8 text-center border border-dashed border-border rounded-sm m-2">
                   <p className="text-xs font-mono text-muted-foreground">WORKSPACE EMPTY</p>
-                  <p className="text-[10px] font-mono text-muted-foreground/60 mt-1">Files created by the agent will appear here.</p>
+                  <p className="text-[10px] font-mono text-muted-foreground/60 mt-1">Files created by the agent will appear here. Drag & drop into chat to upload yours.</p>
                 </div>
               ) : (
                 files.map(file => (

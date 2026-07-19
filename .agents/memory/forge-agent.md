@@ -27,3 +27,8 @@ Auth/deployment decisions (July 2026):
 Brand kit applied: name "ForgeOS", ember orange primary #FF7A18 (hsl 25 100% 55%), gradient to #E23E1C, dark base #0E1116 (hsl 217 22% 7%).
 **Why:** user-supplied brand kit; WCAG — white on #FF7A18 fails AA (~2.6:1), so primary/sidebar-primary foregrounds are the dark base color (dark-on-orange, matching the mark's glyph).
 **How to apply:** any new UI accent/glow uses rgba(255,122,24,…) not the old rgba(255,87,34,…); keep dark text on orange buttons.
+
+## File uploads & workspace fragility
+Uploads are raw-body PUTs (no multer — keeps esbuild static-import rule); name in URL, basename-flattened, control-chars/length rejected server-side; client caps at 3 concurrent PUTs because the server buffers bodies in memory.
+**Why:** /tmp workspaces vanish on host/container restart, which silently broke the first upload attempt.
+**How to apply:** any new route that writes into a session workspace must `mkdir -p` the workspace dir first (self-heal), and prefer the raw-body pattern over multipart for new upload surfaces.
