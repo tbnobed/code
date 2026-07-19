@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { Terminal, HardDrive, Cpu, Plus, Loader2, Trash2, LogOut, User as UserIcon } from "lucide-react";
 import { useListSessions, useDeleteSession, useCreateSession, getListSessionsQueryKey, useGetCurrentUser, useLogout } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -107,8 +107,9 @@ function CreateSessionDialog({ onOpenChange }: { onOpenChange?: (open: boolean) 
 
 function SessionList() {
   const { data: sessions, isLoading } = useListSessions();
-  const [location, setLocation] = useLocation();
-  const searchParams = new URLSearchParams(window.location.search);
+  const [, setLocation] = useLocation();
+  const search = useSearch();
+  const searchParams = new URLSearchParams(search);
   const activeSessionId = searchParams.get("session") ? parseInt(searchParams.get("session")!, 10) : null;
   const deleteSession = useDeleteSession();
   const queryClient = useQueryClient();
@@ -240,7 +241,8 @@ function UserBlock() {
 }
 
 export default function ForgeLayout() {
-  const searchParams = new URLSearchParams(window.location.search);
+  const search = useSearch();
+  const searchParams = new URLSearchParams(search);
   const activeSessionId = searchParams.get("session") ? parseInt(searchParams.get("session")!, 10) : null;
 
   return (
