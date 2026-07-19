@@ -17,16 +17,8 @@ if (!process.env.SESSION_SECRET) {
 }
 
 // connect-pg-simple's createTableIfMissing reads table.sql from its package
-// dir, which breaks when the server is bundled (esbuild). Create it ourselves.
-export const ensureSessionTable = pool.query(`
-  CREATE TABLE IF NOT EXISTS "user_sessions" (
-    "sid" varchar NOT NULL COLLATE "default",
-    "sess" json NOT NULL,
-    "expire" timestamp(6) NOT NULL,
-    CONSTRAINT "user_sessions_pkey" PRIMARY KEY ("sid")
-  );
-  CREATE INDEX IF NOT EXISTS "IDX_user_sessions_expire" ON "user_sessions" ("expire");
-`);
+// dir, which breaks when the server is bundled (esbuild). The "user_sessions"
+// table is created by ensureSchema() (lib/schema-init.ts) at startup instead.
 
 /**
  * Seed (or rotate) the admin account. Self-registration is disabled, so this

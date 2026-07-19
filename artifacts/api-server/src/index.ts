@@ -1,10 +1,11 @@
 import app from "./app";
-import { ensureSessionTable, seedAdminUser } from "./lib/auth";
+import { seedAdminUser } from "./lib/auth";
+import { ensureSchema } from "./lib/schema-init";
 import { logger } from "./lib/logger";
 
-// Make sure the session store table and the admin account exist before
-// accepting traffic.
-await ensureSessionTable;
+// Apply the schema (idempotent) and seed the admin account before accepting
+// traffic — this also migrates existing databases on updated builds.
+await ensureSchema();
 await seedAdminUser();
 
 const rawPort = process.env["PORT"];

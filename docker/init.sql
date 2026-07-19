@@ -1,5 +1,8 @@
 -- Schema initialization for Forge (runs once on a fresh Postgres volume).
--- Keep in sync with lib/db/src/schema/*.ts (drizzle is the source of truth in dev).
+-- NOTE: the app also applies this schema idempotently at startup
+-- (artifacts/api-server/src/lib/schema-init.ts), which covers EXISTING volumes
+-- when a new build adds tables/columns. Keep both in sync with
+-- lib/db/src/schema/*.ts (drizzle is the source of truth in dev).
 
 CREATE TABLE IF NOT EXISTS "users" (
   "id" serial PRIMARY KEY,
