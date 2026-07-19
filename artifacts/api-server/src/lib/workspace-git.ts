@@ -14,23 +14,37 @@ function git(dir: string, args: string[], maxBuffer = 10 * 1024 * 1024) {
 /** Initialize the workspace checkpoint repo if missing; safe to call repeatedly. */
 export async function ensureRepo(dir: string) {
   await fs.mkdir(dir, { recursive: true });
+  let isRepo = true;
   try {
     await fs.stat(path.join(dir, ".git"));
+  } catch {
+    isRepo = false;
+  }
+  if (!isRepo) {
+    await git(dir, ["init", "-q"]);
+    // Keep bulky/transient dirs out of checkpoints — but never stomp a
+    // .gitignore the project already has.
+    const gi = path.join(dir, ".gitignore");
+    try {
+      await fs.stat(gi);
+    } catch {
+      await fs.writeFile(gi, "node_modules/\n.env\n");
+    }
+    await git(dir, ["add", "-A"]);
+    await git(dir, ["commit", "-q", "--allow-empty", "-m", "forge: initial checkpoint"]);
     return;
-  } catch {
-    // not a repo yet
   }
-  await git(dir, ["init", "-q"]);
-  // Keep bulky/transient dirs out of checkpoints — but never stomp a
-  // .gitignore the project already has.
-  const gi = path.join(dir, ".gitignore");
+  // Self-heal: repos initialized by older builds (or after an interrupted
+  // init) can exist with ZERO commits — an unborn HEAD breaks every
+  // rev-list/log/diff consumer (checkpoints tab, send-for-review). Give such
+  // repos their root commit, capturing whatever is in the workspace now as
+  // the session baseline.
   try {
-    await fs.stat(gi);
+    await git(dir, ["rev-parse", "--verify", "--quiet", "HEAD"]);
   } catch {
-    await fs.writeFile(gi, "node_modules/\n.env\n");
+    await git(dir, ["add", "-A"]);
+    await git(dir, ["commit", "-q", "--allow-empty", "-m", "forge: initial checkpoint"]);
   }
-  await git(dir, ["add", "-A"]);
-  await git(dir, ["commit", "-q", "--allow-empty", "-m", "forge: initial checkpoint"]);
 }
 
 /**
@@ -131,8 +145,19 @@ export async function revertTo(dir: string, hash: string) {
  * commit pending manual changes first so the diff includes them.
  */
 export async function diffSinceStart(dir: string) {
-  const { stdout: rootOut } = await git(dir, ["rev-list", "--max-parents=0", "HEAD"]);
-  const root = rootOut.trim().split("\n")[0];
+  let root: string;
+  try {
+    const { stdout: rootOut } = await git(dir, ["rev-list", "--max-parents=0", "HEAD"]);
+    root = rootOut.trim().split("\n")[0];
+  } catch (err) {
+    // No resolvable HEAD (no commits yet / damaged ref): there is nothing to
+    // diff — report "no changes" instead of leaking raw git stderr upstream.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/unknown revision|ambiguous argument|bad revision|does not have any commits/i.test(msg)) {
+      return "";
+    }
+    throw err;
+  }
   try {
     const { stdout } = await git(
       dir,
