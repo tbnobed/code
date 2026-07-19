@@ -121,6 +121,33 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
     if (e.dataTransfer?.files?.length) uploadFiles(e.dataTransfer.files);
   };
 
+  // Paste a screen capture straight into the composer: clipboard images are
+  // uploaded like dropped files. Clipboard files all arrive named "image.png",
+  // so they get unique timestamped names to avoid overwriting each other.
+  const handlePaste = (e: React.ClipboardEvent) => {
+    let images = Array.from(e.clipboardData?.items ?? [])
+      .filter((it) => it.kind === "file" && it.type.startsWith("image/"))
+      .map((it) => it.getAsFile())
+      .filter((f): f is File => f !== null);
+    // Some Safari/Firefox paths expose pasted files on .files, not .items.
+    if (!images.length) {
+      images = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
+    }
+    if (!images.length) return; // plain text paste: leave the default alone
+    // Rich clipboards can carry text alongside an image; only swallow the
+    // paste when there is no text to insert.
+    if (!e.clipboardData.getData("text/plain")) e.preventDefault();
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+    const rand = Math.random().toString(36).slice(2, 6);
+    uploadFiles(
+      images.map((f, i) => {
+        const ext = (f.type.split("/")[1] ?? "png").replace("jpeg", "jpg").replace(/[^a-z0-9]/gi, "") || "png";
+        const suffix = images.length > 1 ? `-${i + 1}` : "";
+        return new File([f], `pasted-${stamp}-${rand}${suffix}.${ext}`, { type: f.type });
+      }),
+    );
+  };
+
   const WRITE_TOOLS = ["create_file", "edit_file", "run_command"];
   const refreshWorkspaceState = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(sessionId) });
@@ -224,8 +251,11 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
     if ((!trimmed && attachedFiles.length === 0) || isStreaming || isUploading) return;
 
     // Mention freshly uploaded files so the agent knows to look for them.
+    // Image attachments get an explicit nudge toward the vision tool — local
+    // models won't reliably think to look otherwise.
+    const hasImages = attachedFiles.some((n) => /\.(png|jpe?g|gif|webp|bmp|tiff?|heic|heif|avif|svg)$/i.test(n));
     const attachNote = attachedFiles.length
-      ? `[Uploaded to the workspace: ${attachedFiles.join(", ")}]`
+      ? `[Uploaded to the workspace: ${attachedFiles.join(", ")}${hasImages ? " — use analyze_image to view the image(s) before answering" : ""}]`
       : "";
     const messageContent = [attachNote, trimmed].filter(Boolean).join("\n\n");
     setInput("");
@@ -595,6 +625,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
               <Input 
                 value={input}
                 onChange={e => setInput(e.target.value)}
+                onPaste={handlePaste}
                 placeholder={architectMode ? "Deep-dive question for the architect (no file edits)..." : attachedFiles.length ? "What should I do with these files?" : "Command sequence or natural language instruction..."}
                 className="w-full pl-10 pr-36 py-6 bg-background border-2 border-input focus-visible:border-primary focus-visible:ring-0 rounded-sm font-mono text-sm shadow-sm transition-all"
                 disabled={isStreaming}
