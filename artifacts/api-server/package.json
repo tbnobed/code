@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.112.3",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
     "archiver": "^8.0.0",

@@ -28,6 +28,13 @@ export interface SessionInput {
   model?: string;
 }
 
+export interface Capabilities {
+  /** Whether "Send for review" (Claude) is configured. */
+  review: boolean;
+  /** Model used for reviews, present when review is true. */
+  reviewModel?: string;
+}
+
 export interface Message {
   id: number;
   sessionId: number;

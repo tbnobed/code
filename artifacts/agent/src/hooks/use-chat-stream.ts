@@ -9,6 +9,9 @@ type StreamEvent =
   | { type: "done" }
   | { type: "error"; message: string };
 
+/** agent = coding turn, architect = local reasoning model, review = Claude code review */
+type TurnKind = "agent" | "architect" | "review";
+
 interface UseChatStreamOptions {
   sessionId: number;
   onDone?: () => void;
@@ -27,8 +30,8 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
   // Architect-mode reasoning trace (never persisted — display only).
   const [streamingThinking, setStreamingThinking] = useState("");
   const [activeToolCall, setActiveToolCall] = useState<{name: string, arguments: string} | null>(null);
-  // Whether the current/last stream was an architect (reasoning) turn.
-  const [isArchitectTurn, setIsArchitectTurn] = useState(false);
+  // What kind of turn the current/last stream was (drives the header UI).
+  const [turnKind, setTurnKind] = useState<TurnKind>("agent");
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -59,7 +62,8 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
     if (hadStream && !opts?.silent) onStoppedRef.current?.();
   }, []);
 
-  const sendChat = useCallback(async (content: string, opts?: { architect?: boolean }) => {
+  /** Shared SSE pump for all turn types (chat, architect, review). */
+  const startStream = useCallback(async (path: string, body: unknown, kind: TurnKind) => {
     if (abortControllerRef.current) return; // a turn is already in flight
 
     const ac = new AbortController();
@@ -69,20 +73,28 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
     setStreamingText("");
     setStreamingThinking("");
     setActiveToolCall(null);
-    setIsArchitectTurn(!!opts?.architect);
+    setTurnKind(kind);
 
     try {
-      const response = await fetch(`${import.meta.env.BASE_URL}api/sessions/${sessionId}/chat`, {
+      const response = await fetch(`${import.meta.env.BASE_URL}api/sessions/${sessionId}/${path}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content, architect: !!opts?.architect }),
+        ...(body !== undefined
+          ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+          : {}),
         signal: ac.signal,
       });
 
       if (!response.ok) {
-        throw new Error(`Error: ${response.statusText}`);
+        // Non-SSE failures (e.g. review 503 when unconfigured) carry a JSON
+        // {error} body worth showing verbatim.
+        let msg = `Error: ${response.statusText}`;
+        try {
+          const j = await response.json();
+          if (j?.error) msg = j.error;
+        } catch {
+          // no JSON body — keep the status text
+        }
+        throw new Error(msg);
       }
 
       if (!response.body) {
@@ -159,6 +171,15 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
     }
   }, [sessionId]);
 
+  const sendChat = useCallback(
+    (content: string, opts?: { architect?: boolean }) =>
+      startStream("chat", { content, architect: !!opts?.architect }, opts?.architect ? "architect" : "agent"),
+    [startStream],
+  );
+
+  /** Send the session's work to Claude for an external code review. */
+  const sendReview = useCallback(() => startStream("review", undefined, "review"), [startStream]);
+
   // Cleanup on unmount only (stopStream is referentially stable).
   useEffect(() => {
     return () => {
@@ -168,12 +189,14 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
 
   return {
     sendChat,
+    sendReview,
     isStreaming,
     streamingText,
     streamingThinking,
     activeToolCall,
     error,
     stopStream,
-    isArchitectTurn
+    isArchitectTurn: turnKind === "architect",
+    isReviewTurn: turnKind === "review"
   };
 }

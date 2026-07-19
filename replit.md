@@ -11,7 +11,7 @@ Self-hosted agentic coding assistant (a private "Replit Agent") that runs entire
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only; prod migrates via schema-init at boot)
 - Required env: `DATABASE_URL` — Postgres connection string; `SESSION_SECRET`; `ADMIN_PASSWORD` (first boot)
-- Optional env: `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_ARCHITECT_MODEL`, `OLLAMA_VISION_MODEL`
+- Optional env: `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_ARCHITECT_MODEL`, `OLLAMA_VISION_MODEL`; `ANTHROPIC_API_KEY` (+ `ANTHROPIC_BASE_URL`, `ANTHROPIC_REVIEW_MODEL`) enables "Send for review"
 - Production: `docker compose up -d --build` on the DGX (app on port 3000)
 
 ## Stack
@@ -39,6 +39,7 @@ Self-hosted agentic coding assistant (a private "Replit Agent") that runs entire
 - Per-user session ownership is enforced at ONE choke point: `getSessionOr404` in `routes/sessions.ts` resolves the requester and returns an identical 404 for "missing" and "not yours" (serial ids must not leak existence). Admins bypass ownership and see everyone's sessions (list attaches owner username).
 - Workspace preview is authorized by signed expiring HMAC tokens in the URL, because the sandboxed iframe has an opaque origin and drops cookies.
 - Accounts are admin-managed only (no self-registration); the admin is seeded from env at boot.
+- "Send for review" is the ONE opt-in cloud feature in an otherwise local-only app: the session diff goes to Anthropic (Claude) only when ANTHROPIC_* creds are set. The UI hides the button via GET /capabilities; the route 503s when unconfigured. Dev workspace uses the Replit AI-integration proxy vars as fallback; the DGX uses the user's own key.
 
 ## Product
 
@@ -46,6 +47,7 @@ Self-hosted agentic coding assistant (a private "Replit Agent") that runs entire
 - Chat-driven coding agent with tool calling (file ops, shell exec, url fetch, image/vision input), streamed over SSE with stop/retry.
 - Architect mode: a second, deep-reasoning model for whole-turn consultation (Brain toggle in the composer).
 - Per-turn git checkpoints with diff view and revert; built-in terminal; editable file viewer; live site preview; workspace zip download.
+- Send for review: one click ships the session's full diff to Claude for a structured external code review, streamed into chat and saved in history.
 
 ## User preferences
 

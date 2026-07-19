@@ -125,3 +125,35 @@ export async function revertTo(dir: string, hash: string) {
   const r = await git(dir, ["rev-parse", "HEAD"]);
   return r.stdout.trim();
 }
+
+/**
+ * Whole-session diff: initial checkpoint -> HEAD, size-capped. Callers should
+ * commit pending manual changes first so the diff includes them.
+ */
+export async function diffSinceStart(dir: string) {
+  const { stdout: rootOut } = await git(dir, ["rev-list", "--max-parents=0", "HEAD"]);
+  const root = rootOut.trim().split("\n")[0];
+  try {
+    const { stdout } = await git(
+      dir,
+      ["diff", root, "HEAD", "--patch", "--stat", "--no-color"],
+      32 * 1024 * 1024,
+    );
+    return stdout.length > 200_000 ? stdout.slice(0, 200_000) + "\n...[diff truncated]" : stdout;
+  } catch (err) {
+    // A diff bigger than the buffer should degrade to a clear message, not a
+    // crash-y ENOBUFS error surfacing in the stream.
+    if ((err as NodeJS.ErrnoException)?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
+      throw new Error(
+        "The session diff is too large to review (>32MB). Review earlier, or start a fresh session for new work.",
+      );
+    }
+    throw err;
+  }
+}
+
+/** Newline-separated list of files under checkpoint control. */
+export async function listTrackedFiles(dir: string) {
+  const { stdout } = await git(dir, ["ls-files"]);
+  return stdout.trim();
+}

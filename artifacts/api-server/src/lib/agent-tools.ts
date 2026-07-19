@@ -185,7 +185,7 @@ const REDACT_ENV = /SECRET|PASSWORD|TOKEN|API_?KEY|CREDENTIAL|DATABASE_URL|^PG/i
 // Env vars stripped entirely from user-facing shells (terminal + run_command).
 // GITHUB_TOKEN is intentionally kept: the git credential helper reads it at
 // use time, and its value is still redacted from all output.
-const STRIP_ENV = /SECRET|PASSWORD|DATABASE_URL|^PG|^REPL/i;
+const STRIP_ENV = /SECRET|PASSWORD|DATABASE_URL|API_KEY|TOKEN|ANTHROPIC|AI_INTEGRATIONS|^PG|^REPL/i;
 
 export function redactSecrets(s: string): string {
   for (const [name, value] of Object.entries(process.env)) {

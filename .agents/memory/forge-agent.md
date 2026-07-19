@@ -60,3 +60,9 @@ Uploads are raw-body PUTs (no multer — keeps esbuild static-import rule); name
 ## Tool quirk: `$$` collapses to `$` in Edit-tool writes
 - Writing `DO $$ ... END $$;` via the file-edit tool landed on disk as `DO $ ... END $;` → Postgres `syntax error at or near "$"` at boot, twice, and follow-up exact-match/regex edits targeting `$$` failed to find it.
 - **How to apply:** after any tool-write containing `$` runs, grep the file to confirm; or write such content via `node -e` with escapes. Prefer SQL that needs no dollar-quoting in boot migrations.
+
+## "Send for review" (Claude) design
+- The ONLY cloud call in the app; opt-in by env. Precedence `ANTHROPIC_*` || `AI_INTEGRATIONS_ANTHROPIC_*` (Replit dev proxy fallback) — use `||` not `??` because compose passes empty strings for unset vars.
+- Feature gating pattern: server capability endpoint (`/capabilities`) drives UI visibility; route double-checks and 503s. Reuse this pattern for future optional features.
+- Review turns reuse the chat SSE contract (`text`/`error`/`done`) so the frontend stream pump stays single-path (`startStream` in use-chat-stream).
+- SECURITY INVARIANT: every new server-side secret env var must match `STRIP_ENV` in agent-tools, or it inherits into user terminals/run_command shells. Verify empirically with `env | grep` via the exec route (values masked). Output redaction alone is NOT protection.

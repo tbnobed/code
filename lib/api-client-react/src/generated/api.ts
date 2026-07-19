@@ -21,6 +21,7 @@ import type {
 
 import type {
   ApiError,
+  Capabilities,
   ChatInput,
   CredentialsBody,
   FilePathInput,
@@ -1095,6 +1096,77 @@ export const useSendChat = <TError = ErrorType<void>,
       return useMutation(getSendChatMutationOptions(options));
     }
 
+export const getReviewSessionUrl = (id: number,) => {
+
+
+
+
+  return `/api/sessions/${id}/review`
+}
+
+/**
+ * @summary Stream an external Claude code review of the session's work via SSE
+ */
+export const reviewSession = async (id: number, options?: RequestInit): Promise<unknown> => {
+
+  return customFetch<unknown>(getReviewSessionUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getReviewSessionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewSession>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reviewSession>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['reviewSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reviewSession>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  reviewSession(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReviewSessionMutationResult = NonNullable<Awaited<ReturnType<typeof reviewSession>>>
+
+    export type ReviewSessionMutationError = ErrorType<void>
+
+    /**
+ * @summary Stream an external Claude code review of the session's work via SSE
+ */
+export const useReviewSession = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewSession>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reviewSession>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getReviewSessionMutationOptions(options));
+    }
+
 export const getListWorkspaceFilesUrl = (id: number,) => {
 
 
@@ -1243,6 +1315,83 @@ export const useReadWorkspaceFile = <TError = ErrorType<void>,
       > => {
       return useMutation(getReadWorkspaceFileMutationOptions(options));
     }
+
+export const getGetCapabilitiesUrl = () => {
+
+
+
+
+  return `/api/capabilities`
+}
+
+/**
+ * @summary Feature availability flags
+ */
+export const getCapabilities = async ( options?: RequestInit): Promise<Capabilities> => {
+
+  return customFetch<Capabilities>(getGetCapabilitiesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCapabilitiesQueryKey = () => {
+    return [
+    `/api/capabilities`
+    ] as const;
+    }
+
+
+export const getGetCapabilitiesQueryOptions = <TData = Awaited<ReturnType<typeof getCapabilities>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCapabilities>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCapabilitiesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCapabilities>>> = ({ signal }) => getCapabilities({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCapabilities>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCapabilitiesQueryResult = NonNullable<Awaited<ReturnType<typeof getCapabilities>>>
+export type GetCapabilitiesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Feature availability flags
+ */
+
+export function useGetCapabilities<TData = Awaited<ReturnType<typeof getCapabilities>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCapabilities>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCapabilitiesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListModelsUrl = () => {
 

@@ -7,6 +7,7 @@
  */
 
 export * from './apiError';
+export * from './capabilities';
 export * from './chatInput';
 export * from './credentialsBody';
 export * from './filePathInput';

@@ -233,6 +233,16 @@ export const SendChatResponse = zod.unknown()
 
 
 /**
+ * @summary Stream an external Claude code review of the session's work via SSE
+ */
+export const ReviewSessionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ReviewSessionResponse = zod.unknown()
+
+
+/**
  * @summary List all files in the session workspace
  */
 export const ListWorkspaceFilesParams = zod.object({
@@ -264,6 +274,15 @@ export const ReadWorkspaceFileResponse = zod.object({
   "path": zod.string(),
   "content": zod.string(),
   "language": zod.string()
+})
+
+
+/**
+ * @summary Feature availability flags
+ */
+export const GetCapabilitiesResponse = zod.object({
+  "review": zod.boolean().describe('Whether \"Send for review\" (Claude) is configured.'),
+  "reviewModel": zod.string().optional().describe('Model used for reviews, present when review is true.')
 })
 
 

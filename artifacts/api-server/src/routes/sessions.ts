@@ -9,6 +9,8 @@ import path from "node:path";
 import { createWorkspace, resolveInWorkspace, languageFromPath } from "../lib/workspace";
 import { DEFAULT_MODEL } from "../lib/ollama";
 import { runAgentTurn, runArchitectTurn } from "../lib/agent-loop";
+import { runReviewTurn } from "../lib/review";
+import { reviewAvailable } from "../lib/anthropic";
 import { redactSecrets, workspaceEnv, makeStreamRedactor } from "../lib/agent-tools";
 import {
   ensureRepo,
@@ -198,6 +200,50 @@ router.post("/sessions/:id/chat", async (req, res) => {
     } catch (err) {
       req.log.warn({ err }, "checkpoint commit failed");
     }
+    send({ type: "done" });
+    if (!res.destroyed) res.end();
+  }
+  return undefined;
+});
+
+// Send the session's work to Claude for an external code review (SSE).
+router.post("/sessions/:id/review", async (req, res) => {
+  const session = await getSessionOr404(req, res);
+  if (!session) return;
+  if (!reviewAvailable()) {
+    return res.status(503).json({
+      error: "Code review is not configured — set ANTHROPIC_API_KEY on the server.",
+    });
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const ac = new AbortController();
+  res.on("close", () => {
+    if (!res.writableEnded) ac.abort();
+  });
+  const send = (event: Record<string, unknown>) => {
+    if (res.writableEnded || res.destroyed) return;
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  // Fold any manual edits into a checkpoint so the review sees them too.
+  try {
+    await ensureRepo(session.workspacePath);
+    await commitTurn(session.workspacePath, "manual changes");
+  } catch (err) {
+    req.log.warn({ err }, "pre-review checkpoint failed");
+  }
+
+  try {
+    await runReviewTurn(session, send, ac.signal);
+  } catch (err) {
+    req.log.error({ err }, "review turn failed");
+    send({ type: "error", message: err instanceof Error ? err.message : "Review failed" });
+  } finally {
     send({ type: "done" });
     if (!res.destroyed) res.end();
   }

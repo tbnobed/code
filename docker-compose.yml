@@ -15,6 +15,10 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3-coder-next}
       OLLAMA_ARCHITECT_MODEL: ${OLLAMA_ARCHITECT_MODEL:-qwen3-next:80b-a3b-thinking}
       OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-qwen2.5vl}
+      # Optional: "Send for review" (Claude). Feature stays hidden when unset.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      ANTHROPIC_REVIEW_MODEL: ${ANTHROPIC_REVIEW_MODEL:-claude-sonnet-4-6}
       # Optional: enables the agent's GitHub push/pull sync (fine-grained PAT
       # with Contents read/write on the repos you want it to touch)
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}

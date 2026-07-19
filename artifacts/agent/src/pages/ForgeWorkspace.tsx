@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useGetSession, useListWorkspaceFiles, useReadWorkspaceFile } from "@workspace/api-client-react";
-import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download, Paperclip, Upload, X, Pencil, Save, Square, RotateCcw, GitCommitHorizontal, SquareTerminal, Brain } from "lucide-react";
+import { useGetSession, useListWorkspaceFiles, useReadWorkspaceFile, useGetCapabilities } from "@workspace/api-client-react";
+import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download, Paperclip, Upload, X, Pencil, Save, Square, RotateCcw, GitCommitHorizontal, SquareTerminal, Brain, ShieldCheck } from "lucide-react";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import CheckpointsPanel from "@/components/forge/CheckpointsPanel";
 import TerminalPanel from "@/components/forge/TerminalPanel";
@@ -130,7 +130,8 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
   }, [queryClient, sessionId]);
 
   const [architectMode, setArchitectMode] = useState(false);
-  const { sendChat, isStreaming, streamingText, streamingThinking, activeToolCall, error, stopStream, isArchitectTurn } = useChatStream({
+  const { data: capabilities } = useGetCapabilities();
+  const { sendChat, sendReview, isStreaming, streamingText, streamingThinking, activeToolCall, error, stopStream, isArchitectTurn, isReviewTurn } = useChatStream({
     sessionId,
     onDone: refreshWorkspaceState,
     onToolResult: (name) => {
@@ -485,6 +486,8 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                   <div className="flex items-center gap-2 text-[10px] font-mono font-bold text-muted-foreground tracking-wider uppercase mb-1">
                     {isArchitectTurn ? (
                       <><Brain className="w-3 h-3 text-primary animate-pulse" /> ARCHITECT_PROCESS</>
+                    ) : isReviewTurn ? (
+                      <><ShieldCheck className="w-3 h-3 text-primary animate-pulse" /> CLAUDE_REVIEW</>
                     ) : (
                       <><Cpu className="w-3 h-3 text-primary animate-pulse" /> AGENT_PROCESS</>
                     )}
@@ -525,7 +528,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                     {!streamingText && !streamingThinking && !activeToolCall && (
                       <div className="flex items-center gap-3 text-muted-foreground text-sm font-mono italic">
                         <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                        {isArchitectTurn ? "Architect is thinking..." : "Generating response..."}
+                        {isArchitectTurn ? "Architect is thinking..." : isReviewTurn ? "Claude is reviewing this session\u2019s work..." : "Generating response..."}
                       </div>
                     )}
                   </div>
@@ -608,6 +611,19 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                     className="h-8 font-mono tracking-widest text-[10px] rounded-sm px-3 gap-1.5"
                   >
                     <Square className="w-3 h-3 fill-current" /> STOP
+                  </Button>
+                )}
+                {capabilities?.review && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={isStreaming || isUploading}
+                    title={`Send for review \u2014 ${capabilities.reviewModel ?? "Claude"} audits everything this session changed`}
+                    onClick={() => sendReview()}
+                    className="h-8 w-8 rounded-sm text-muted-foreground hover:text-primary"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
                   </Button>
                 )}
                 <Button

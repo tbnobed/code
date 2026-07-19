@@ -305,6 +305,27 @@ paths:
         "404":
           description: Not found
 
+  /sessions/{id}/review:
+    post:
+      operationId: reviewSession
+      tags: [sessions]
+      summary: Stream an external Claude code review of the session's work via SSE
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: SSE stream of review events
+          content:
+            text/event-stream: {}
+        "404":
+          description: Not found
+        "503":
+          description: Review is not configured on this server
+
   /sessions/{id}/files:
     get:
       operationId: listWorkspaceFiles
@@ -354,6 +375,19 @@ paths:
                 $ref: "#/components/schemas/WorkspaceFileContent"
         "404":
           description: Not found
+
+  /capabilities:
+    get:
+      operationId: getCapabilities
+      tags: [system]
+      summary: Feature availability flags
+      responses:
+        "200":
+          description: Capabilities
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Capabilities"
 
   /models:
     get:
@@ -423,6 +457,18 @@ components:
           type: string
       required:
         - title
+
+    Capabilities:
+      type: object
+      properties:
+        review:
+          type: boolean
+          description: Whether "Send for review" (Claude) is configured.
+        reviewModel:
+          type: string
+          description: Model used for reviews, present when review is true.
+      required:
+        - review
 
     SessionWithMessages:
       type: object
