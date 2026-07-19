@@ -49,3 +49,14 @@ Brand kit applied: name "ForgeOS", ember orange primary #FF7A18 (hsl 25 100% 55%
 Uploads are raw-body PUTs (no multer — keeps esbuild static-import rule); name in URL, basename-flattened, control-chars/length rejected server-side; client caps at 3 concurrent PUTs because the server buffers bodies in memory.
 **Why:** /tmp workspaces vanish on host/container restart, which silently broke the first upload attempt.
 **How to apply:** any new route that writes into a session workspace must `mkdir -p` the workspace dir first (self-heal), and prefer the raw-body pattern over multipart for new upload surfaces.
+
+## Per-user session ownership (July 2026)
+- Authz choke point: every session-scoped route resolves via one `getSessionOr404(req,res)` helper that returns an identical 404 for "missing" and "not yours" (no existence leak). New session routes MUST go through it.
+- **Why 404 not 403:** enumerable serial ids; a 403 confirms a session exists.
+- Admins see all sessions (list left-joins users to attach owner `username`; UI shows @owner chip only when it differs from viewer).
+- Legacy/orphan sessions are adopted by the first admin at boot (schema-init backfill); deleting a user cascades their sessions in DB, then rm's workspace dirs.
+- Avoid `$$` dollar-quoting in schema-init SQL: plain statements only (see tool quirk below), and the boot migration runs through a semicolon-batched pool.query.
+
+## Tool quirk: `$$` collapses to `$` in Edit-tool writes
+- Writing `DO $$ ... END $$;` via the file-edit tool landed on disk as `DO $ ... END $;` → Postgres `syntax error at or near "$"` at boot, twice, and follow-up exact-match/regex edits targeting `$$` failed to find it.
+- **How to apply:** after any tool-write containing `$` runs, grep the file to confirm; or write such content via `node -e` with escapes. Prefer SQL that needs no dollar-quoting in boot migrations.

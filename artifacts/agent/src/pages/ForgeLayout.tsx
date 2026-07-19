@@ -107,6 +107,7 @@ function CreateSessionDialog({ onOpenChange }: { onOpenChange?: (open: boolean) 
 
 function SessionList() {
   const { data: sessions, isLoading } = useListSessions();
+  const { data: me } = useGetCurrentUser();
   const [, setLocation] = useLocation();
   const search = useSearch();
   const searchParams = new URLSearchParams(search);
@@ -168,6 +169,11 @@ function SessionList() {
                 <span className="text-[10px] text-sidebar-foreground/50 truncate font-mono mt-0.5 flex items-center gap-1">
                   <Cpu className="h-3 w-3" />
                   {session.model}
+                  {session.username && me?.username && session.username !== me.username && (
+                    <span className="text-sidebar-primary/80 truncate" title={`Owned by ${session.username}`}>
+                      @{session.username}
+                    </span>
+                  )}
                 </span>
               </div>
               <Button 

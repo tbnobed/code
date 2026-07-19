@@ -9,6 +9,8 @@ import type { Message } from './message';
 
 export interface SessionWithMessages {
   id: number;
+  /** Id of the user who owns this session. */
+  userId?: number;
   title: string;
   model: string;
   workspacePath: string;

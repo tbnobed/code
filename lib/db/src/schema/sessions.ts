@@ -1,9 +1,13 @@
 import { pgTable, text, serial, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { usersTable } from "./users";
 
 export const sessionsTable = pgTable("sessions", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => usersTable.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   model: text("model").notNull().default("qwen3-coder-next"),
   workspacePath: text("workspace_path").notNull(),

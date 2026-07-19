@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
+import fs from "node:fs/promises";
 import { eq, asc } from "drizzle-orm";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, sessionsTable } from "@workspace/db";
 import { requireAdmin } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -63,7 +64,18 @@ router.delete("/users/:id", async (req, res) => {
   if (target.isAdmin) {
     return res.status(400).json({ error: "The admin account cannot be deleted" });
   }
+  // Their sessions cascade-delete with the user row; the workspace dirs on
+  // disk need explicit cleanup.
+  const orphaned = await db
+    .select({ workspacePath: sessionsTable.workspacePath })
+    .from(sessionsTable)
+    .where(eq(sessionsTable.userId, id));
   await db.delete(usersTable).where(eq(usersTable.id, id));
+  for (const s of orphaned) {
+    await fs.rm(s.workspacePath, { recursive: true, force: true }).catch((err) => {
+      console.warn(`[users] failed to remove workspace ${s.workspacePath}: ${err?.message ?? err}`);
+    });
+  }
   return res.status(204).end();
 });
 

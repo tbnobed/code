@@ -383,6 +383,12 @@ components:
     Session:
       type: object
       properties:
+        userId:
+          type: integer
+          description: Id of the user who owns this session.
+        username:
+          type: string
+          description: Owner's username — included in list responses so admins can tell whose session it is.
         id:
           type: integer
         title:
@@ -423,6 +429,9 @@ components:
       properties:
         id:
           type: integer
+        userId:
+          type: integer
+          description: Id of the user who owns this session.
         title:
           type: string
         model:

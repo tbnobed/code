@@ -87,6 +87,24 @@ export const requireAuth: RequestHandler = (req, res, next) => {
   next();
 };
 
+/**
+ * Resolve the logged-in user for ownership checks. DB-backed on every call so
+ * admin status is never stale (nothing at runtime toggles is_admin, but a
+ * deleted user's live cookie must stop working immediately).
+ */
+export async function getRequester(req: {
+  session: { userId?: number };
+}): Promise<{ id: number; isAdmin: boolean } | null> {
+  if (!req.session.userId) return null;
+  const { db, usersTable } = await import("@workspace/db");
+  const { eq } = await import("drizzle-orm");
+  const [user] = await db
+    .select({ id: usersTable.id, isAdmin: usersTable.isAdmin })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.session.userId));
+  return user ?? null;
+}
+
 export const requireAdmin: RequestHandler = async (req, res, next) => {
   if (!req.session.userId) {
     res.status(401).json({ error: "Not authenticated" });

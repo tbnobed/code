@@ -10,6 +10,10 @@ export interface HealthStatus {
 }
 
 export interface Session {
+  /** Id of the user who owns this session. */
+  userId?: number;
+  /** Owner's username — included in list responses so admins can tell whose session it is. */
+  username?: string;
   id: number;
   title: string;
   model: string;
@@ -38,6 +42,8 @@ export interface Message {
 
 export interface SessionWithMessages {
   id: number;
+  /** Id of the user who owns this session. */
+  userId?: number;
   title: string;
   model: string;
   workspacePath: string;

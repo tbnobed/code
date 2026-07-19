@@ -1,6 +1,6 @@
 import { Router, raw, type IRouter } from "express";
 import { eq, desc, asc, and, gte, sql } from "drizzle-orm";
-import { db, sessionsTable, messagesTable } from "@workspace/db";
+import { db, sessionsTable, messagesTable, usersTable } from "@workspace/db";
 import fs from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { ZipArchive } from "archiver";
@@ -17,12 +17,15 @@ import {
   diffCheckpoint,
   revertTo,
 } from "../lib/workspace-git";
+import { getRequester } from "../lib/auth";
 
 const router: IRouter = Router();
 
-function serializeSession(s: typeof sessionsTable.$inferSelect) {
+function serializeSession(s: typeof sessionsTable.$inferSelect, username?: string) {
   return {
     id: s.id,
+    userId: s.userId,
+    ...(username !== undefined ? { username } : {}),
     title: s.title,
     model: s.model,
     workspacePath: s.workspacePath,
@@ -44,8 +47,16 @@ function serializeMessage(m: typeof messagesTable.$inferSelect) {
   };
 }
 
-async function getSessionOr404(id: string, res: any) {
-  const sessionId = Number(id);
+async function getSessionOr404(
+  req: { params: Record<string, string | undefined>; session: { userId?: number } },
+  res: any,
+) {
+  const requester = await getRequester(req);
+  if (!requester) {
+    res.status(401).json({ error: "Not authenticated" });
+    return null;
+  }
+  const sessionId = Number(req.params.id);
   if (!Number.isInteger(sessionId)) {
     res.status(404).json({ error: "Session not found" });
     return null;
@@ -54,24 +65,32 @@ async function getSessionOr404(id: string, res: any) {
     .select()
     .from(sessionsTable)
     .where(eq(sessionsTable.id, sessionId));
-  if (!session) {
+  // Non-owners get the same 404 as a missing session: don't leak existence.
+  if (!session || (session.userId !== requester.id && !requester.isAdmin)) {
     res.status(404).json({ error: "Session not found" });
     return null;
   }
   return session;
 }
 
-// List sessions
-router.get("/sessions", async (_req, res) => {
-  const sessions = await db
-    .select()
+// List sessions — each user sees only their own; admins see everyone's
+// (with the owner's username attached so the UI can label them).
+router.get("/sessions", async (req, res) => {
+  const requester = await getRequester(req);
+  if (!requester) return res.status(401).json({ error: "Not authenticated" });
+  const rows = await db
+    .select({ session: sessionsTable, username: usersTable.username })
     .from(sessionsTable)
+    .leftJoin(usersTable, eq(sessionsTable.userId, usersTable.id))
+    .where(requester.isAdmin ? undefined : eq(sessionsTable.userId, requester.id))
     .orderBy(desc(sessionsTable.updatedAt));
-  res.json(sessions.map(serializeSession));
+  return res.json(rows.map((r) => serializeSession(r.session, r.username ?? undefined)));
 });
 
 // Create session
 router.post("/sessions", async (req, res) => {
+  const requester = await getRequester(req);
+  if (!requester) return res.status(401).json({ error: "Not authenticated" });
   const { title, model } = req.body ?? {};
   if (!title || typeof title !== "string") {
     return res.status(400).json({ error: "title is required" });
@@ -82,6 +101,7 @@ router.post("/sessions", async (req, res) => {
       title,
       model: typeof model === "string" && model ? model : DEFAULT_MODEL,
       workspacePath: "pending",
+      userId: requester.id,
     })
     .returning();
   const workspacePath = await createWorkspace(session.id);
@@ -95,7 +115,7 @@ router.post("/sessions", async (req, res) => {
 
 // Get session with messages
 router.get("/sessions/:id", async (req, res) => {
-  const session = await getSessionOr404(req.params.id, res);
+  const session = await getSessionOr404(req, res);
   if (!session) return;
   const messages = await db
     .select()
@@ -107,7 +127,7 @@ router.get("/sessions/:id", async (req, res) => {
 
 // Delete session
 router.delete("/sessions/:id", async (req, res) => {
-  const session = await getSessionOr404(req.params.id, res);
+  const session = await getSessionOr404(req, res);
   if (!session) return;
   await db.delete(sessionsTable).where(eq(sessionsTable.id, session.id));
   await fs.rm(session.workspacePath, { recursive: true, force: true }).catch(() => {});
@@ -116,7 +136,7 @@ router.delete("/sessions/:id", async (req, res) => {
 
 // List messages
 router.get("/sessions/:id/messages", async (req, res) => {
-  const session = await getSessionOr404(req.params.id, res);
+  const session = await getSessionOr404(req, res);
   if (!session) return;
   const messages = await db
     .select()
@@ -128,7 +148,7 @@ router.get("/sessions/:id/messages", async (req, res) => {
 
 // Chat (SSE stream)
 router.post("/sessions/:id/chat", async (req, res) => {
-  const session = await getSessionOr404(req.params.id, res);
+  const session = await getSessionOr404(req, res);
   if (!session) return;
   const { content, architect } = req.body ?? {};
   if (!content || typeof content !== "string") {
@@ -186,7 +206,7 @@ router.post("/sessions/:id/chat", async (req, res) => {
 
 // Checkpoints (git history of the workspace)
 router.get("/sessions/:id/checkpoints", async (req, res) => {
-  const session = await getSessionOr404(req.params.id, res);
+  const session = await getSessionOr404(req, res);
   if (!session) return;
   try {
     res.json(await listCheckpoints(session.workspacePath));
@@ -197,7 +217,7 @@ router.get("/sessions/:id/checkpoints", async (req, res) => {
 });
 
 router.get("/sessions/:id/checkpoints/:hash/diff", async (req, res) => {
-  const session = await getSessionOr404(req.params.id, res);
+  const session = await getSessionOr404(req, res);
   if (!session) return;
   try {
     res.json({ diff: await diffCheckpoint(session.workspacePath, req.params.hash) });
@@ -208,7 +228,7 @@ router.get("/sessions/:id/checkpoints/:hash/diff", async (req, res) => {
 });
 
 router.post("/sessions/:id/checkpoints/:hash/revert", async (req, res) => {
-  const session = await getSessionOr404(req.params.id, res);
+  const session = await getSessionOr404(req, res);
   if (!session) return;
   try {
     const commit = await revertTo(session.workspacePath, req.params.hash);
@@ -221,7 +241,7 @@ router.post("/sessions/:id/checkpoints/:hash/revert", async (req, res) => {
 
 // Delete a message and everything after it (retry / edit-last-message)
 router.delete("/sessions/:id/messages/:messageId", async (req, res) => {
-  const session = await getSessionOr404(req.params.id, res);
+  const session = await getSessionOr404(req, res);
   if (!session) return;
   const mid = Number(req.params.messageId);
   if (!Number.isInteger(mid)) {
@@ -248,7 +268,7 @@ router.delete("/sessions/:id/messages/:messageId", async (req, res) => {
 
 // Save a file from the in-app editor
 router.put("/sessions/:id/file", async (req, res) => {
-  const session = await getSessionOr404(req.params.id, res);
+  const session = await getSessionOr404(req, res);
   if (!session) return;
   const { path: relPath, content } = req.body ?? {};
   if (!relPath || typeof relPath !== "string" || typeof content !== "string") {
@@ -270,7 +290,7 @@ router.put("/sessions/:id/file", async (req, res) => {
 
 // User terminal: run a command in the workspace, stream output (SSE)
 router.post("/sessions/:id/exec", async (req, res) => {
-  const session = await getSessionOr404(req.params.id, res);
+  const session = await getSessionOr404(req, res);
   if (!session) return;
   const { command } = req.body ?? {};
   if (!command || typeof command !== "string") {
@@ -349,7 +369,7 @@ router.post("/sessions/:id/exec", async (req, res) => {
 
 // Workspace file listing
 router.get("/sessions/:id/files", async (req, res) => {
-  const session = await getSessionOr404(req.params.id, res);
+  const session = await getSessionOr404(req, res);
   if (!session) return;
 
   async function walk(dir: string): Promise<any[]> {
@@ -387,7 +407,7 @@ router.put(
   "/sessions/:id/files/:name",
   raw({ type: () => true, limit: "25mb" }),
   async (req, res) => {
-    const session = await getSessionOr404(req.params.id, res);
+    const session = await getSessionOr404(req, res);
     if (!session) return;
     if (!Buffer.isBuffer(req.body)) {
       return res.status(400).json({ error: "Expected a raw file body" });
@@ -421,14 +441,14 @@ router.put(
 // Issue a signed preview token (requires login); the preview routes
 // themselves are cookie-free because the sandboxed iframe drops cookies.
 router.get("/sessions/:id/preview-token", async (req, res) => {
-  const session = await getSessionOr404(req.params.id, res);
+  const session = await getSessionOr404(req, res);
   if (!session) return;
   res.json({ token: makePreviewToken(session.id) });
 });
 
 // Download the whole workspace as a zip (excludes node_modules/.git)
 router.get("/sessions/:id/download", async (req, res) => {
-  const session = await getSessionOr404(req.params.id, res);
+  const session = await getSessionOr404(req, res);
   if (!session) return;
 
   const safeName = (session.title || `session-${session.id}`)
@@ -460,7 +480,7 @@ router.get("/sessions/:id/download", async (req, res) => {
 
 // Read workspace file
 router.post("/sessions/:id/file", async (req, res) => {
-  const session = await getSessionOr404(req.params.id, res);
+  const session = await getSessionOr404(req, res);
   if (!session) return;
   const { path: relPath } = req.body ?? {};
   if (!relPath || typeof relPath !== "string") {

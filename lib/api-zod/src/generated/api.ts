@@ -126,6 +126,8 @@ export const ResetUserPasswordResponse = zod.void()
  * @summary List all agent sessions
  */
 export const ListSessionsResponseItem = zod.object({
+  "userId": zod.number().optional().describe('Id of the user who owns this session.'),
+  "username": zod.string().optional().describe('Owner\'s username — included in list responses so admins can tell whose session it is.'),
   "id": zod.number(),
   "title": zod.string(),
   "model": zod.string(),
@@ -146,6 +148,8 @@ export const CreateSessionBody = zod.object({
 })
 
 export const CreateSessionResponse = zod.object({
+  "userId": zod.number().optional().describe('Id of the user who owns this session.'),
+  "username": zod.string().optional().describe('Owner\'s username — included in list responses so admins can tell whose session it is.'),
   "id": zod.number(),
   "title": zod.string(),
   "model": zod.string(),
@@ -165,6 +169,7 @@ export const GetSessionParams = zod.object({
 
 export const GetSessionResponse = zod.object({
   "id": zod.number(),
+  "userId": zod.number().optional().describe('Id of the user who owns this session.'),
   "title": zod.string(),
   "model": zod.string(),
   "workspacePath": zod.string(),

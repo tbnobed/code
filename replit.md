@@ -1,15 +1,18 @@
-# [Project name]
+# ForgeOS
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Self-hosted agentic coding assistant (a private "Replit Agent") that runs entirely on the user's own hardware — local LLMs via Ollama on an NVIDIA DGX Spark, multi-user, no cloud APIs.
 
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/agent run dev` — run the React frontend (Vite, HMR)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only; prod migrates via schema-init at boot)
+- Required env: `DATABASE_URL` — Postgres connection string; `SESSION_SECRET`; `ADMIN_PASSWORD` (first boot)
+- Optional env: `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_ARCHITECT_MODEL`, `OLLAMA_VISION_MODEL`
+- Production: `docker compose up -d --build` on the DGX (app on port 3000)
 
 ## Stack
 
@@ -22,23 +25,40 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/api-server/src/routes/` — HTTP API (auth, sessions, users, preview, models)
+- `artifacts/api-server/src/lib/` — agent loop, agent tools, auth middleware, workspace + git helpers, boot schema init
+- `artifacts/agent/src/` — React UI (ForgeLayout sidebar/shell, ForgeWorkspace chat + panels)
+- `lib/db/src/schema/` — Drizzle schema (source of truth for tables)
+- `lib/api-spec/openapi.yaml` — API contract source of truth (orval generates `lib/api-client-react` + zod)
+- Agent workspaces live under `/tmp/agent-workspaces/<sessionId>` in dev (volume-mounted dir in prod)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Ollama-only LLM access through the native `/api/chat` endpoint (streaming NDJSON); no cloud fallbacks by design.
+- Boot-time idempotent `ensureSchema()` (plain SQL, `IF NOT EXISTS`) is the production migration path — Docker's init.sql only runs on fresh volumes.
+- Per-user session ownership is enforced at ONE choke point: `getSessionOr404` in `routes/sessions.ts` resolves the requester and returns an identical 404 for "missing" and "not yours" (serial ids must not leak existence). Admins bypass ownership and see everyone's sessions (list attaches owner username).
+- Workspace preview is authorized by signed expiring HMAC tokens in the URL, because the sandboxed iframe has an opaque origin and drops cookies.
+- Accounts are admin-managed only (no self-registration); the admin is seeded from env at boot.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Multi-user login; each user has their own agent sessions and isolated workspaces; admins additionally see all sessions (labeled with owner) and manage users.
+- Chat-driven coding agent with tool calling (file ops, shell exec, url fetch, image/vision input), streamed over SSE with stop/retry.
+- Architect mode: a second, deep-reasoning model for whole-turn consultation (Brain toggle in the composer).
+- Per-turn git checkpoints with diff view and revert; built-in terminal; editable file viewer; live site preview; workspace zip download.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Local-first / self-hosted: never add cloud LLM API dependencies.
+- Brand: ember orange `#FF7A18`, dark text on orange.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Restart the API Server workflow after backend changes (it runs an esbuild bundle, not a watcher). The frontend is Vite HMR — no restart needed.
+- After editing `lib/db` schema, run `npx tsc -b lib/db` (or root typecheck) — dependents typecheck against built `dist/` d.ts, which otherwise goes stale.
+- After editing `openapi.yaml`, rerun codegen; transient Vite "file not found" errors during codegen self-heal.
+- `ensureSchema()` runs as one semicolon-batched `pool.query` — keep it plain SQL (no `DO $$` blocks / dollar-quoting).
+- Any new session-scoped route MUST load the session through `getSessionOr404` so ownership is enforced.
 
 ## Pointers
 
