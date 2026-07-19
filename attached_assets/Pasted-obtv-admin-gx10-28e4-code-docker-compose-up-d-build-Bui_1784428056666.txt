@@ -1,0 +1,37 @@
+obtv-admin@gx10-28e4:~/code$ docker compose up -d --build
+[+] Building 6.7s (20/20) FINISHED
+ => [internal] load local bake definitions                                                                                                                                                                  0.0s
+ => => reading from stdin 484B                                                                                                                                                                              0.0s
+ => [internal] load build definition from Dockerfile                                                                                                                                                        0.0s
+ => => transferring dockerfile: 1.54kB                                                                                                                                                                      0.0s
+ => [internal] load metadata for docker.io/library/node:22-slim                                                                                                                                             0.3s
+ => [internal] load .dockerignore                                                                                                                                                                           0.0s
+ => => transferring context: 191B                                                                                                                                                                           0.0s
+ => [build 1/9] FROM docker.io/library/node:22-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3                                                                                 0.0s
+ => [internal] load build context                                                                                                                                                                           0.0s
+ => => transferring context: 231.19kB                                                                                                                                                                       0.0s
+ => CACHED [runtime 2/5] WORKDIR /app                                                                                                                                                                       0.0s
+ => CACHED [build 2/9] RUN corepack enable && corepack prepare pnpm@10 --activate                                                                                                                           0.0s
+ => CACHED [build 3/9] WORKDIR /app                                                                                                                                                                         0.0s
+ => [build 4/9] COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./                                                                                                                  0.0s
+ => [build 5/9] COPY lib ./lib                                                                                                                                                                              0.0s
+ => [build 6/9] COPY artifacts/api-server ./artifacts/api-server                                                                                                                                            0.0s
+ => [build 7/9] COPY artifacts/agent ./artifacts/agent                                                                                                                                                      0.0s
+ => [build 8/9] RUN pnpm install --frozen-lockfile                                                                                                                                                          2.6s
+ => [build 9/9] RUN npx tsc -b lib/db lib/api-zod  && pnpm --filter @workspace/api-server run build  && PORT=3000 BASE_PATH=/ pnpm --filter @workspace/agent run build                                      3.5s
+ => [runtime 3/5] COPY --from=build /app/artifacts/api-server/dist ./dist                                                                                                                                   0.0s
+ => [runtime 4/5] COPY --from=build /app/artifacts/agent/dist/public ./public                                                                                                                               0.0s
+ => [runtime 5/5] RUN useradd -m forge  && mkdir -p /data/workspaces  && chown -R forge:forge /app /data                                                                                                    0.1s
+ => exporting to image                                                                                                                                                                                      0.0s
+ => => exporting layers                                                                                                                                                                                     0.0s
+ => => writing image sha256:82709535f5e6f486add1cfded4eca786e32c6936ad7ee96de73b97503f300b01                                                                                                                0.0s
+ => => naming to docker.io/library/code-forge                                                                                                                                                               0.0s
+ => resolving provenance for metadata file                                                                                                                                                                  0.0s
+[+] up 6/6
+ ✔ Image code-forge       Built                                                                                                                                                                              6.8s
+ ✔ Network code_default   Created                                                                                                                                                                            0.0s
+ ✔ Volume code_pgdata     Created                                                                                                                                                                            0.0s
+ ✔ Volume code_workspaces Created                                                                                                                                                                            0.0s
+ ✔ Container code-db-1    Healthy                                                                                                                                                                            5.6s
+ ✔ Container code-forge-1 Created                                                                                                                                                                            0.0s
+obtv-admin@gx10-28e4:~/code$
