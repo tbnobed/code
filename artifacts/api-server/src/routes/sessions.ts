@@ -2,6 +2,9 @@ import { Router, type IRouter } from "express";
 import { eq, desc, asc } from "drizzle-orm";
 import { db, sessionsTable, messagesTable } from "@workspace/db";
 import fs from "node:fs/promises";
+import { createRequire } from "node:module";
+// archiver is CJS; under ESM + no esModuleInterop, require() it.
+const { ZipArchive } = createRequire(import.meta.url)("archiver") as typeof import("archiver");
 import path from "node:path";
 import { createWorkspace, resolveInWorkspace, languageFromPath } from "../lib/workspace";
 import { DEFAULT_MODEL } from "../lib/ollama";
@@ -202,6 +205,22 @@ const MIME: Record<string, string> = {
   ".map": "application/json",
 };
 
+// Sites often reference assets with root-absolute paths ("/styles.css"),
+// which would escape the preview prefix and 404. Rewrite them to stay
+// under /sessions/:id/preview/.
+function rewriteRootUrls(content: string, base: string, kind: "html" | "css"): string {
+  let out = content;
+  if (kind === "html") {
+    out = out.replace(/(\s(?:href|src|action|poster)\s*=\s*["'])\/(?!\/)/gi, `$1${base}`);
+    out = out.replace(/(\ssrcset\s*=\s*["'])([^"']+)(["'])/gi, (_m, p1, val, p3) => {
+      return p1 + val.replace(/(^|,\s*)\/(?!\/)/g, `$1${base}`) + p3;
+    });
+  }
+  // url(/...) in inline <style> or css files
+  out = out.replace(/(url\(\s*["']?)\/(?!\/)/gi, `$1${base}`);
+  return out;
+}
+
 router.get(/^\/sessions\/(\d+)\/preview(\/.*)?$/, async (req, res) => {
   const session = await getSessionOr404(req.params[0]!, res);
   if (!session) return;
@@ -227,15 +246,53 @@ router.get(/^\/sessions\/(\d+)\/preview(\/.*)?$/, async (req, res) => {
           `<html><body style="font-family:monospace;background:#111;color:#eee;display:grid;place-items:center;height:100vh"><div><h2>No preview yet</h2><p>The workspace has no <code>${relPath === "index.html" ? "index.html" : relPath}</code>. Ask the agent to build a website first.</p></div></body></html>`,
         );
     }
-    res.setHeader(
-      "Content-Type",
-      MIME[path.extname(full).toLowerCase()] ?? "application/octet-stream",
-    );
+    const ext = path.extname(full).toLowerCase();
+    res.setHeader("Content-Type", MIME[ext] ?? "application/octet-stream");
     res.setHeader("Cache-Control", "no-store");
+    // Force an opaque origin even when opened in a new tab: agent-generated
+    // code must never run with the app's origin/auth context.
+    res.setHeader("Content-Security-Policy", "sandbox allow-scripts allow-forms");
+    if (ext === ".html" || ext === ".htm" || ext === ".css") {
+      const base = `${req.baseUrl}/sessions/${session.id}/preview/`;
+      const text = await fs.readFile(full, "utf8");
+      return res.send(rewriteRootUrls(text, base, ext === ".css" ? "css" : "html"));
+    }
     return res.send(await fs.readFile(full));
   } catch {
     return res.status(404).json({ error: "File not found" });
   }
+});
+
+// Download the whole workspace as a zip (excludes node_modules/.git)
+router.get("/sessions/:id/download", async (req, res) => {
+  const session = await getSessionOr404(req.params.id, res);
+  if (!session) return;
+
+  const safeName = (session.title || `session-${session.id}`)
+    .replace(/[^a-zA-Z0-9-_ ]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .toLowerCase() || `session-${session.id}`;
+
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${safeName}.zip"`);
+
+  const archive = new ZipArchive({ zlib: { level: 6 } });
+  archive.on("error", (err: Error) => {
+    req.log?.error({ err }, "zip archive failed");
+    res.destroy();
+  });
+  res.on("close", () => {
+    // Stop compressing if the client disconnects mid-download.
+    if (!res.writableFinished) archive.abort();
+  });
+  archive.pipe(res);
+  archive.glob("**/*", {
+    cwd: session.workspacePath,
+    ignore: ["node_modules/**", ".git/**"],
+    dot: true,
+  });
+  await archive.finalize();
 });
 
 // Read workspace file

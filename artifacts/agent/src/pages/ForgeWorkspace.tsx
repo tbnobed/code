@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useGetSession, useListWorkspaceFiles, useReadWorkspaceFile } from "@workspace/api-client-react";
-import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, MessageSquare } from "lucide-react";
+import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, MessageSquare, Download } from "lucide-react";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -374,11 +374,22 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
             </div>
           )}
 
-          <div className="p-3 border-b border-border shrink-0 bg-muted/50">
+          <div className="p-3 border-b border-border shrink-0 bg-muted/50 flex items-center justify-between">
             <h3 className="font-mono text-xs font-bold tracking-widest text-muted-foreground flex items-center gap-2">
               <HardDrive className="w-3.5 h-3.5" />
               WORKSPACE_FILES
             </h3>
+            {!!files?.length && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-6 h-6"
+                title="Download all files as zip"
+                onClick={() => { window.location.href = `${import.meta.env.BASE_URL}api/sessions/${sessionId}/download`; }}
+              >
+                <Download className="w-3.5 h-3.5" />
+              </Button>
+            )}
           </div>
           
           <ScrollArea className="flex-1">
