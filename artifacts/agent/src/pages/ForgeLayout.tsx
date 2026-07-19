@@ -198,6 +198,7 @@ function SessionList() {
 import { cn } from "@/lib/utils";
 import ForgeWorkspace from "./ForgeWorkspace";
 import UsersDialog from "@/components/UsersDialog";
+import GithubSettingsDialog from "@/components/GithubSettingsDialog";
 
 function UserBlock() {
   const { data: user } = useGetCurrentUser();
@@ -236,6 +237,7 @@ function UserBlock() {
           </span>
         </div>
       </div>
+      <GithubSettingsDialog />
       {user.isAdmin && <UsersDialog />}
       <Button 
         variant="ghost" 

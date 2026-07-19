@@ -33,6 +33,7 @@ import {
   revertTo,
 } from "../lib/workspace-git";
 import { getRequester } from "../lib/auth";
+import { resolveGithubToken, autoPushIfEnabled } from "../lib/github";
 
 const router: IRouter = Router();
 
@@ -45,6 +46,8 @@ function serializeSession(s: typeof sessionsTable.$inferSelect, username?: strin
     model: s.model,
     workspacePath: s.workspacePath,
     messageCount: s.messageCount,
+    githubRepo: s.githubRepo,
+    githubAutopush: s.githubAutopush,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
   };
@@ -63,7 +66,7 @@ function serializeMessage(m: typeof messagesTable.$inferSelect) {
   };
 }
 
-async function getSessionOr404(
+export async function getSessionOr404(
   req: { params: Record<string, string | undefined>; session: { userId?: number } },
   res: any,
 ) {
@@ -205,12 +208,16 @@ router.post("/sessions/:id/chat", async (req, res) => {
     req.log.warn({ err }, "pre-turn checkpoint failed");
   }
 
+  // Git credentials for the turn belong to the REQUESTER: an admin driving
+  // another user's session must never get the owner's PAT into shell env.
+  const actor = await getRequester(req);
+
   try {
     if (architect === true) {
       // Deep-dive turn: reasoning model, no tools, thinking streamed to UI.
       await runArchitectTurn(session, content, send, ac.signal);
     } else {
-      await runAgentTurn(session, content, send, ac.signal);
+      await runAgentTurn(session, content, send, ac.signal, actor?.id);
     }
   } catch (err) {
     req.log.error({ err }, "agent turn failed");
@@ -218,7 +225,13 @@ router.post("/sessions/:id/chat", async (req, res) => {
   } finally {
     try {
       const hash = await commitTurn(session.workspacePath, content);
-      if (hash) send({ type: "checkpoint", hash });
+      if (hash) {
+        send({ type: "checkpoint", hash });
+        // Fire-and-forget: pushing must never delay the done event.
+        autoPushIfEnabled(session.id).catch((err) =>
+          req.log.warn({ err }, "auto-push failed"),
+        );
+      }
     } catch (err) {
       req.log.warn({ err }, "checkpoint commit failed");
     }
@@ -397,9 +410,15 @@ router.post("/sessions/:id/exec", async (req, res) => {
   res.on("close", () => clearInterval(heartbeat));
 
   await fs.mkdir(session.workspacePath, { recursive: true });
+  // Git credentials belong to the REQUESTER (their PAT, else the legacy env
+  // token) — an admin driving another user's session must never get the
+  // owner's PAT into a shell they control. Redactors scrub it from output.
+  const requester = await getRequester(req);
+  const ghToken = requester ? await resolveGithubToken(requester.id) : null;
+  const ghSecrets = ghToken ? [ghToken] : [];
   const child = spawn("/bin/bash", ["-c", command], {
     cwd: session.workspacePath,
-    env: workspaceEnv(), // server-only secrets stripped from user shells
+    env: workspaceEnv(ghToken), // server-only secrets stripped from user shells
     detached: true, // own process group so we can kill the whole tree
   });
   const killTree = () => {
@@ -415,7 +434,7 @@ router.post("/sessions/:id/exec", async (req, res) => {
   let streamed = 0;
   // Per-channel stateful redactors: they hold back partial lines so a secret
   // split across chunk boundaries can never be emitted unredacted.
-  const redactors = { stdout: makeStreamRedactor(), stderr: makeStreamRedactor() };
+  const redactors = { stdout: makeStreamRedactor(ghSecrets), stderr: makeStreamRedactor(ghSecrets) };
   const forward = (kind: "stdout" | "stderr") => (buf: Buffer) => {
     if (streamed > OUTPUT_CAP) return;
     streamed += buf.length;

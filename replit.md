@@ -41,6 +41,7 @@ Self-hosted agentic coding assistant (a private "Replit Agent") that runs entire
 - Workspace preview is authorized by signed expiring HMAC tokens in the URL, because the sandboxed iframe has an opaque origin and drops cookies.
 - Accounts are admin-managed only (no self-registration); the admin is seeded from env at boot.
 - "Send for review" is the ONE opt-in cloud feature in an otherwise local-only app: the session diff goes to Anthropic (Claude) only when ANTHROPIC_* creds are set. The UI hides the button via GET /capabilities; the route 503s when unconfigured. Dev workspace uses the Replit AI-integration proxy vars as fallback; the DGX uses the user's own key.
+- Per-user GitHub PATs are stored AES-256-GCM-encrypted (key derived from SESSION_SECRET; rotating it disconnects everyone) and never returned to the client. Session git operations always use the session OWNER's token (env `GITHUB_TOKEN` is the legacy single-user fallback), injected per-process via env so the boot-time credential helper picks it up; it is scrubbed from tool results, terminal streams, and push errors. Account endpoints live under `/me/github*` (the `/users` prefix is admin-gated). The GitHub endpoints + session `githubRepo`/`githubAutopush` fields are raw-fetched in the UI and not yet in `openapi.yaml`.
 
 ## Product
 
@@ -50,6 +51,7 @@ Self-hosted agentic coding assistant (a private "Replit Agent") that runs entire
 - Per-turn git checkpoints with diff view and revert; built-in terminal; editable file viewer; live site preview; workspace zip download.
 - Send for review: one click ships the session's full diff to Claude for a structured external code review, streamed into chat and saved in history.
 - Image generation: opt-in `generate_image` tool backed by a local Stable Diffusion server (AUTOMATIC1111 or ComfyUI, auto-detected); saves PNGs into the workspace, thumbnails render in chat and the file viewer displays images.
+- GitHub: each user connects a PAT in settings (bottom-left GitHub icon); per session, one-click create/link a repo (header GITHUB button), manual Push, auto-push-per-checkpoint toggle, and unlink. Commits attribute to the user's GitHub noreply identity; the agent gets push instructions in its prompt when a repo is linked.
 
 ## User preferences
 

@@ -218,11 +218,17 @@ const REDACT_ENV = /SECRET|PASSWORD|TOKEN|API_?KEY|CREDENTIAL|DATABASE_URL|^PG/i
 // use time, and its value is still redacted from all output.
 const STRIP_ENV = /SECRET|PASSWORD|DATABASE_URL|API_KEY|TOKEN|ANTHROPIC|AI_INTEGRATIONS|^PG|^REPL/i;
 
-export function redactSecrets(s: string): string {
+export function redactSecrets(s: string, extraSecrets?: readonly string[]): string {
   for (const [name, value] of Object.entries(process.env)) {
     if (!value || value.length < 8) continue;
     if (!REDACT_ENV.test(name)) continue;
     if (s.includes(value)) s = s.split(value).join(`[REDACTED_${name}]`);
+  }
+  // Per-user secrets (e.g. the session owner's GitHub PAT) live in the DB,
+  // not the environment, so callers pass them explicitly.
+  for (const value of extraSecrets ?? []) {
+    if (!value || value.length < 8) continue;
+    if (s.includes(value)) s = s.split(value).join("[REDACTED_TOKEN]");
   }
   return s;
 }
@@ -230,12 +236,15 @@ export function redactSecrets(s: string): string {
 /** Environment for user-facing shells: server-only secrets (session signing
  * key, admin password, database URL) are stripped so they cannot leak via
  * `env`, child processes, or crash dumps. */
-export function workspaceEnv(): NodeJS.ProcessEnv {
+export function workspaceEnv(githubToken?: string | null): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const [k, v] of Object.entries(process.env)) {
     if (k !== "GITHUB_TOKEN" && STRIP_ENV.test(k)) continue;
     env[k] = v;
   }
+  // Per-session override: the session owner's PAT takes precedence over the
+  // legacy server-wide token so git operations run as the right account.
+  if (githubToken) env.GITHUB_TOKEN = githubToken;
   return env;
 }
 
@@ -244,7 +253,7 @@ export function workspaceEnv(): NodeJS.ProcessEnv {
  * secret split across two chunks, so complete lines are redacted and emitted
  * while the trailing partial line is held back until it completes (or flush).
  */
-export function makeStreamRedactor() {
+export function makeStreamRedactor(extraSecrets?: readonly string[]) {
   const MAX_HOLD = 8192; // force-flush pathological single lines
   let carry = "";
   return {
@@ -262,19 +271,19 @@ export function makeStreamRedactor() {
         emit += carry.slice(0, carry.length - 256);
         carry = carry.slice(carry.length - 256);
       }
-      return emit ? redactSecrets(emit) : "";
+      return emit ? redactSecrets(emit, extraSecrets) : "";
     },
     flush(): string {
       const rest = carry;
       carry = "";
-      return rest ? redactSecrets(rest) : "";
+      return rest ? redactSecrets(rest, extraSecrets) : "";
     },
   };
 }
 
 /** Redact first (so truncation can never split a secret), then truncate. */
-function sanitize(s: string) {
-  const clean = redactSecrets(s);
+function sanitize(s: string, extraSecrets?: readonly string[]) {
+  const clean = redactSecrets(s, extraSecrets);
   return clean.length > MAX_OUTPUT ? clean.slice(0, MAX_OUTPUT) + "\n...[truncated]" : clean;
 }
 
@@ -298,7 +307,10 @@ export async function executeTool(
   name: string,
   args: Record<string, unknown>,
   signal?: AbortSignal,
+  opts?: { githubToken?: string | null },
 ): Promise<{ result: string; isError: boolean }> {
+  // The owner's PAT must be scrubbed from every tool result the model sees.
+  const extra = opts?.githubToken ? [opts.githubToken] : [];
   try {
     switch (name) {
       case "create_file": {
@@ -341,12 +353,14 @@ export async function executeTool(
       case "read_file": {
         const p = await resolveInWorkspace(workspaceDir, String(args.path));
         const content = await fs.readFile(p, "utf8");
-        return { result: sanitize(content), isError: false };
+        return { result: sanitize(content, extra), isError: false };
       }
       case "list_files": {
         const files = await listFilesRecursive(workspaceDir, workspaceDir);
         return {
-          result: files.length ? files.join("\n") : "(workspace is empty)",
+          // Sanitized: file NAMES can carry secrets too (e.g. a file named
+          // after a token value by a misbehaving command).
+          result: sanitize(files.length ? files.join("\n") : "(workspace is empty)", extra),
           isError: false,
         };
       }
@@ -354,7 +368,7 @@ export async function executeTool(
         return await new Promise((resolve) => {
           const child = spawn("/bin/bash", ["-c", String(args.command)], {
             cwd: workspaceDir,
-            env: workspaceEnv(), // server-only secrets stripped
+            env: workspaceEnv(opts?.githubToken), // server-only secrets stripped; owner's GitHub token injected for git
             detached: true, // own process group so abort/timeout kills the whole tree
           });
           const killTree = () => {
@@ -407,7 +421,7 @@ export async function executeTool(
             if (spawnErr) parts.push(`[error: ${spawnErr.message}]`);
             else if (code !== 0) parts.push(`[exit code: ${code ?? "killed"}]`);
             resolve({
-              result: sanitize(parts.join("\n") || "(no output)"),
+              result: sanitize(parts.join("\n") || "(no output)", extra),
               isError: Boolean(spawnErr) || code !== 0,
             });
           };
@@ -481,7 +495,7 @@ export async function executeTool(
           `URL: ${u}\n` +
           (title ? `Title: ${title}\n` : "") +
           `\n${text.slice(0, 8000)}${text.length > 8000 ? "\n...[truncated]" : ""}`;
-        return { result: sanitize(out), isError: false };
+        return { result: sanitize(out, extra), isError: false };
       }
       case "analyze_image": {
         const rel = String(args.path ?? "").trim();
@@ -527,7 +541,7 @@ export async function executeTool(
         const data = (await resp.json()) as { message?: { content?: string } };
         const answer = data?.message?.content?.trim();
         if (!answer) return { result: "Vision model returned no content", isError: true };
-        return { result: sanitize(`[${VISION_MODEL} looked at ${rel}]\n${answer}`), isError: false };
+        return { result: sanitize(`[${VISION_MODEL} looked at ${rel}]\n${answer}`, extra), isError: false };
       }
       case "consult_architect": {
         const question = String(args.question ?? "").trim();
@@ -602,12 +616,12 @@ export async function executeTool(
           .replace(/<think>[\s\S]*?<\/think>/g, "")
           .trim();
         if (!answer) return { result: "Architect model returned no content", isError: true };
-        return { result: sanitize(`[architect ${ARCHITECT_MODEL}]\n${answer}`), isError: false };
+        return { result: sanitize(`[architect ${ARCHITECT_MODEL}]\n${answer}`, extra), isError: false };
       }
       default:
         return { result: `Unknown tool: ${name}`, isError: true };
     }
   } catch (err) {
-    return { result: sanitize(err instanceof Error ? err.message : String(err)), isError: true };
+    return { result: sanitize(err instanceof Error ? err.message : String(err), extra), isError: true };
   }
 }

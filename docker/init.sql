@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS "users" (
   "username" text NOT NULL UNIQUE,
   "password_hash" text NOT NULL,
   "is_admin" boolean NOT NULL DEFAULT false,
+  "github_token" text,
+  "github_login" text,
+  "github_email" text,
   "created_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
@@ -18,6 +21,8 @@ CREATE TABLE IF NOT EXISTS "sessions" (
   "model" text NOT NULL DEFAULT 'qwen3-coder-next',
   "workspace_path" text NOT NULL,
   "message_count" integer NOT NULL DEFAULT 0,
+  "github_repo" text,
+  "github_autopush" boolean NOT NULL DEFAULT false,
   "created_at" timestamp with time zone NOT NULL DEFAULT now(),
   "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );

@@ -3,6 +3,7 @@ import { useGetSession, useListWorkspaceFiles, useReadWorkspaceFile, useGetCapab
 import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download, Paperclip, Upload, X, Pencil, Save, Square, RotateCcw, GitCommitHorizontal, SquareTerminal, Brain, ShieldCheck } from "lucide-react";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import CheckpointsPanel from "@/components/forge/CheckpointsPanel";
+import GithubPanel from "@/components/GithubPanel";
 import TerminalPanel from "@/components/forge/TerminalPanel";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,10 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
   const { data: sessionData, isLoading: isLoadingSession } = useGetSession(sessionId, { 
     query: { enabled: !!sessionId, queryKey: getGetSessionQueryKey(sessionId) } 
   });
+
+  // The session's GitHub fields aren't in the generated client types yet
+  // (OpenAPI spec not regenerated) — read them off the raw payload.
+  const ghFields = (sessionData ?? {}) as { githubRepo?: string | null; githubAutopush?: boolean };
   
   const { data: files } = useListWorkspaceFiles(sessionId, {
     query: { enabled: !!sessionId, queryKey: getListWorkspaceFilesQueryKey(sessionId) }
@@ -412,6 +417,12 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
           </Badge>
         </div>
         <div className="text-xs font-mono text-muted-foreground flex gap-4 items-center">
+          <GithubPanel
+            sessionId={sessionId}
+            sessionTitle={sessionData.title}
+            githubRepo={ghFields.githubRepo ?? null}
+            githubAutopush={ghFields.githubAutopush ?? false}
+          />
           <Button
             variant={showPreview ? "default" : "outline"}
             size="sm"

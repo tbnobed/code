@@ -7,6 +7,13 @@ const run = promisify(execFile);
 export const githubEnabled = Boolean(process.env.GITHUB_TOKEN);
 
 /**
+ * Reads $GITHUB_TOKEN at use time; declines (exit 1) when unset. Shared by
+ * the boot-time global config and per-push `-c` injection (which must reset
+ * the helper chain first to neutralize workspace-planted helpers).
+ */
+export const GITHUB_CREDENTIAL_HELPER = `!f() { test -n "$GITHUB_TOKEN" || return 1; echo username=x-access-token; echo "password=$GITHUB_TOKEN"; }; f`;
+
+/**
  * Configure git for the agent, if git is installed.
  * When GITHUB_TOKEN is set, authenticate HTTPS GitHub remotes via a
  * credential helper that reads the token from the environment at use time —
@@ -39,12 +46,10 @@ async function configureGit() {
     // Never prompt for credentials interactively (would hang run_command)
     ["core.askPass", ""],
   ];
-  if (githubEnabled) {
-    config.push([
-      "credential.https://github.com.helper",
-      `!f() { echo username=x-access-token; echo "password=$GITHUB_TOKEN"; }; f`,
-    ]);
-  }
+  // Installed unconditionally: tokens now arrive per-session via env (the
+  // owner's PAT, or the legacy server-wide GITHUB_TOKEN). With no token the
+  // helper declines and git fails cleanly instead of hanging on a prompt.
+  config.push(["credential.https://github.com.helper", GITHUB_CREDENTIAL_HELPER]);
   for (const [key, value] of config) {
     await run("git", ["config", "--global", key, value]);
   }

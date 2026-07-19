@@ -21,6 +21,10 @@ export async function ensureSchema(): Promise<void> {
       "created_at" timestamp with time zone NOT NULL DEFAULT now()
     );
     ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_admin" boolean NOT NULL DEFAULT false;
+    -- Per-user GitHub account (PAT encrypted at rest; login/email for commit identity)
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "github_token" text;
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "github_login" text;
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "github_email" text;
 
     CREATE TABLE IF NOT EXISTS "sessions" (
       "id" serial PRIMARY KEY,
@@ -40,6 +44,10 @@ export async function ensureSchema(): Promise<void> {
       (SELECT "id" FROM "users" WHERE "is_admin" = true ORDER BY "id" LIMIT 1),
       (SELECT "id" FROM "users" ORDER BY "id" LIMIT 1)
     ) WHERE "user_id" IS NULL;
+
+    -- Per-session GitHub repo link + auto-push toggle
+    ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "github_repo" text;
+    ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "github_autopush" boolean NOT NULL DEFAULT false;
 
     CREATE TABLE IF NOT EXISTS "messages" (
       "id" serial PRIMARY KEY,

@@ -25,11 +25,23 @@ const GIT_ENV = {
   LC_ALL: "C", // force English git messages — the error-classification regexes depend on them
 };
 
+// Checkpoint git runs with a MINIMAL env (no server secrets, no tokens) and
+// with workspace-plantable exec surfaces disabled (hooks, fsmonitor): .git/
+// lives inside the user-writable workspace, so anything git might execute
+// from there must find nothing worth stealing in its environment.
 function git(dir: string, args: string[], maxBuffer = 10 * 1024 * 1024) {
-  return run("git", ["-C", dir, ...args], {
-    maxBuffer,
-    env: { ...process.env, ...GIT_ENV },
-  });
+  return run(
+    "git",
+    ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-C", dir, ...args],
+    {
+      maxBuffer,
+      env: {
+        ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
+        ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
+        ...GIT_ENV,
+      },
+    },
+  );
 }
 
 /** Initialize the workspace checkpoint repo if missing; safe to call repeatedly. */
