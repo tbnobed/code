@@ -13,7 +13,15 @@ Guidelines:
 - File paths are always relative to the workspace root.
 - After finishing, summarize what you built and how to use it.
 - If a command fails, read the error and fix the problem before giving up.
-- Never restate your plan or repeat text from earlier in the conversation. After a tool result, continue directly from where you left off with the next action.`
+- Never restate your plan or repeat text from earlier in the conversation. After a tool result, continue directly from where you left off with the next action.
+
+Web design standards — any website you build MUST look modern and professionally designed:
+- Always link the stylesheet with a relative path (href="styles.css", never href="/styles.css") and verify the file exists.
+- Write substantial CSS (typically 200+ lines). Never ship a page that relies on browser default styling — default serif text, blue underlined links, and plain bulleted <ul> navigation are unacceptable.
+- Layout: use flexbox/grid; a sticky top nav laid out horizontally with flex; a full-width hero section with large heading, subheading, and a styled call-to-action button; content sections with generous padding (e.g. 80px 24px) and a centered max-width container (~1100px); cards in a responsive grid (repeat(auto-fit, minmax(280px, 1fr))) with border-radius, padding, and subtle box-shadow.
+- Typography: import a Google Font (e.g. Inter or Poppins) with a system-font fallback; set base line-height 1.6; clear size hierarchy (hero ~3rem, section headings ~2rem); remove underlines from nav/button links.
+- Color: define a cohesive palette as CSS variables (a primary brand color, dark text, muted secondary text, light section backgrounds) and use it consistently; buttons get background color, padding, border-radius, and a hover state (color shift or slight transform).
+- Polish: smooth transitions on interactive elements, alternating section background tints, a proper styled footer, and a mobile breakpoint (@media max-width: 768px) that collapses grids to one column.`
   + (githubEnabled
     ? `
 
