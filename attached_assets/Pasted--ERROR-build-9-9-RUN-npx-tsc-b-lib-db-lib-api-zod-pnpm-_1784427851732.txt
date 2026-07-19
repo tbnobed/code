@@ -1,0 +1,82 @@
+ => ERROR [build 9/9] RUN npx tsc -b lib/db lib/api-zod  && pnpm --filter @workspace/api-server run build  && PORT=3000 BASE_PATH=/ pnpm --filter @workspace/agent run build                                1.8s
+------
+ > [build 9/9] RUN npx tsc -b lib/db lib/api-zod  && pnpm --filter @workspace/api-server run build  && PORT=3000 BASE_PATH=/ pnpm --filter @workspace/agent run build:
+1.264
+1.264 > @workspace/api-server@0.0.0 build /app/artifacts/api-server
+1.264 > node ./build.mjs
+1.264
+1.436
+1.436   dist/index.mjs                       2.6mb ⚠️
+1.436   dist/pino-worker.mjs               153.4kb
+1.436   dist/pino-file.mjs                 142.0kb
+1.436   dist/pino-pretty.mjs               114.4kb
+1.436   dist/thread-stream-worker.mjs        7.3kb
+1.436   dist/index.mjs.map                   5.4mb
+1.436   dist/pino-worker.mjs.map           256.9kb
+1.436   dist/pino-file.mjs.map             229.0kb
+1.436   dist/pino-pretty.mjs.map           203.6kb
+1.436   dist/thread-stream-worker.mjs.map   12.0kb
+1.436
+1.436 ⚡ Done in 140ms
+1.635
+1.635 > @workspace/agent@0.0.0 build /app/artifacts/agent
+1.635 > vite build --config vite.config.ts
+1.635
+1.710 /app/node_modules/.pnpm/rollup@4.62.2/node_modules/rollup/dist/native.js:121
+1.710           throw new Error(
+1.710                 ^
+1.710
+1.710 Error: Cannot find module @rollup/rollup-linux-arm64-gnu. npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). Please try `npm i` again after removing both package-lock.json and node_modules directory.
+1.710     at requireWithFriendlyError (/app/node_modules/.pnpm/rollup@4.62.2/node_modules/rollup/dist/native.js:121:9)
+1.710     at Object.<anonymous> (/app/node_modules/.pnpm/rollup@4.62.2/node_modules/rollup/dist/native.js:130:76)
+1.710     at Module._compile (node:internal/modules/cjs/loader:1781:14)
+1.710     at Object..js (node:internal/modules/cjs/loader:1913:10)
+1.710     at Module.load (node:internal/modules/cjs/loader:1505:32)
+1.710     at Function._load (node:internal/modules/cjs/loader:1309:12)
+1.710     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+1.710     at loadCJSModuleWithModuleLoad (node:internal/modules/esm/translators:335:3)
+1.710     at ModuleWrap.<anonymous> (node:internal/modules/esm/translators:235:7)
+1.710     at ModuleJob.run (node:internal/modules/esm/module_job:343:25) {
+1.710   [cause]: Error: Cannot find module '@rollup/rollup-linux-arm64-gnu'
+1.710   Require stack:
+1.710   - /app/node_modules/.pnpm/rollup@4.62.2/node_modules/rollup/dist/native.js
+1.710       at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+1.710       at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)
+1.710       at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)
+1.710       at Function._load (node:internal/modules/cjs/loader:1216:25)
+1.710       at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+1.710       at Module.require (node:internal/modules/cjs/loader:1527:12)
+1.710       at require (node:internal/modules/helpers:147:16)
+1.710       at requireWithFriendlyError (/app/node_modules/.pnpm/rollup@4.62.2/node_modules/rollup/dist/native.js:103:10)
+1.710       at Object.<anonymous> (/app/node_modules/.pnpm/rollup@4.62.2/node_modules/rollup/dist/native.js:130:76)
+1.710       at Module._compile (node:internal/modules/cjs/loader:1781:14) {
+1.710     code: 'MODULE_NOT_FOUND',
+1.710     requireStack: [
+1.710       '/app/node_modules/.pnpm/rollup@4.62.2/node_modules/rollup/dist/native.js'
+1.710     ]
+1.710   }
+1.710 }
+1.710
+1.710 Node.js v22.23.1
+1.740 /app/artifacts/agent:
+1.740  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/agent@0.0.0 build: `vite build --config vite.config.ts`
+[+] up 11/12tatus 1
+ ✔ Image postgres:17-alpine Pulled                                                                                                                                                                          8.3s
+ ⠙ Image code-forge         Building                                                                                                                                                                        11.8s
+Dockerfile:16
+
+--------------------
+
+  15 |     # served from the root of the container's origin.
+
+  16 | >>> RUN npx tsc -b lib/db lib/api-zod \
+
+  17 | >>>  && pnpm --filter @workspace/api-server run build \
+
+  18 | >>>  && PORT=3000 BASE_PATH=/ pnpm --filter @workspace/agent run build
+
+  19 |
+
+--------------------
+
+failed to solve: process "/bin/sh -c npx tsc -b lib/db lib/api-zod  && pnpm --filter @workspace/api-server run build  && PORT=3000 BASE_PATH=/ pnpm --filter @workspace/agent run build" did not complete successfully: exit code: 1
