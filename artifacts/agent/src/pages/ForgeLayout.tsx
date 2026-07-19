@@ -208,11 +208,16 @@ function UserBlock() {
 
   const handleLogout = () => {
     logout.mutate(undefined, {
-      onSuccess: () => {
-        queryClient.clear(); // Clear all data
-        // Then re-fetch user (which will 401 and redirect to Auth)
-        queryClient.invalidateQueries();
-      }
+      // onSettled (not onSuccess): even if the request fails, drop to the
+      // login screen rather than appearing logged in.
+      onSettled: () => {
+        // resetQueries, not clear(): clear() empties the cache but active
+        // observers (AuthGate's useGetCurrentUser) keep their last snapshot,
+        // and a follow-up invalidateQueries() matches nothing — so the gate
+        // never re-evaluated. reset wipes cached data AND refetches active
+        // queries; /auth/me then 401s and AuthGate flips to <Auth />.
+        queryClient.resetQueries();
+      },
     });
   };
 
