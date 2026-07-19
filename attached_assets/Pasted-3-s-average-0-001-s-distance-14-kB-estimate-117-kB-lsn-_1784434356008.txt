@@ -1,0 +1,49 @@
+3 s, average=0.001 s; distance=14 kB, estimate=117 kB; lsn=0/1A12328, redo lsn=0/1A122D0
+forge-1  | }
+forge-1  |
+forge-1  | Node.js v22.23.1
+forge-1  | node:internal/modules/cjs/loader:1430
+forge-1  |   const err = new Error(message);
+forge-1  |               ^
+forge-1  |
+forge-1  | Error: Cannot find module 'archiver'
+forge-1  | Require stack:
+forge-1  | - /app/dist/index.mjs
+forge-1  |     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+forge-1  |     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)
+forge-1  |     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)
+forge-1  |     at Function._load (node:internal/modules/cjs/loader:1216:25)
+forge-1  |     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+forge-1  |     at Module.require (node:internal/modules/cjs/loader:1527:12)
+forge-1  |     at require (node:internal/modules/helpers:147:16)
+forge-1  |     at <anonymous> (/app/src/routes/sessions.ts:7:53)
+forge-1  |     at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+forge-1  |     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:681:26) {
+forge-1  |   code: 'MODULE_NOT_FOUND',
+forge-1  |   requireStack: [ '/app/dist/index.mjs' ]
+forge-1  | }
+forge-1  |
+forge-1  | Node.js v22.23.1
+forge-1  | node:internal/modules/cjs/loader:1430
+forge-1  |   const err = new Error(message);
+forge-1  |               ^
+forge-1  |
+forge-1  | Error: Cannot find module 'archiver'
+forge-1  | Require stack:
+forge-1  | - /app/dist/index.mjs
+forge-1  |     at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+forge-1  |     at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)
+forge-1  |     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)
+forge-1  |     at Function._load (node:internal/modules/cjs/loader:1216:25)
+forge-1  |     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+forge-1  |     at Module.require (node:internal/modules/cjs/loader:1527:12)
+forge-1  |     at require (node:internal/modules/helpers:147:16)
+forge-1  |     at <anonymous> (/app/src/routes/sessions.ts:7:53)
+forge-1  |     at ModuleJob.run (node:internal/modules/esm/module_job:343:25)
+forge-1  |     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:681:26) {
+forge-1  |   code: 'MODULE_NOT_FOUND',
+forge-1  |   requireStack: [ '/app/dist/index.mjs' ]
+forge-1  | }
+forge-1  |
+forge-1  | Node.js v22.23.1
+forge-1  | node:internal/modules/cj

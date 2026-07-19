@@ -2,9 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, desc, asc } from "drizzle-orm";
 import { db, sessionsTable, messagesTable } from "@workspace/db";
 import fs from "node:fs/promises";
-import { createRequire } from "node:module";
-// archiver is CJS; under ESM + no esModuleInterop, require() it.
-const { ZipArchive } = createRequire(import.meta.url)("archiver") as typeof import("archiver");
+import { ZipArchive } from "archiver";
 import path from "node:path";
 import { createWorkspace, resolveInWorkspace, languageFromPath } from "../lib/workspace";
 import { DEFAULT_MODEL } from "../lib/ollama";
