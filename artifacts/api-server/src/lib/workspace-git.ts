@@ -170,27 +170,32 @@ export async function revertTo(dir: string, hash: string) {
 }
 
 /**
- * Whole-session diff: initial checkpoint -> HEAD, size-capped. Callers should
+ * Whole-session diff, size-capped. Workspaces are created empty, so the true
+ * session baseline is git's EMPTY TREE, not the root commit: healed legacy
+ * repos (unborn HEAD fixed after the fact) fold all existing work into their
+ * root commit, and diffing root..HEAD there shows nothing even though the
+ * session built everything. For normal sessions the root checkpoint has an
+ * empty tree, so both baselines produce identical output. Callers should
  * commit pending manual changes first so the diff includes them.
  */
 export async function diffSinceStart(dir: string) {
-  let root: string;
+  let emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"; // sha1 empty tree
   try {
-    const { stdout: rootOut } = await git(dir, ["rev-list", "--max-parents=0", "HEAD"]);
-    root = rootOut.trim().split("\n")[0];
-  } catch (err) {
-    // No resolvable HEAD (no commits yet / damaged ref): there is nothing to
-    // diff — report "no changes" instead of leaking raw git stderr upstream.
-    const msg = err instanceof Error ? err.message : String(err);
-    if (/unknown revision|ambiguous argument|bad revision|does not have any commits/i.test(msg)) {
-      return "";
-    }
-    throw err;
+    // Derive it for the repo's object format (sha256 repos hash differently).
+    const { stdout } = await git(dir, ["hash-object", "-t", "tree", "/dev/null"]);
+    if (stdout.trim()) emptyTree = stdout.trim();
+  } catch {
+    // fall back to the sha1 constant
   }
   try {
+    // The root .gitignore is seeded by ensureRepo, not authored in the session:
+    // when the diff touches nothing else, there is no reviewable work yet.
+    const { stdout: names } = await git(dir, ["diff", "--name-only", emptyTree, "HEAD"]);
+    const realFiles = names.split("\n").filter((n) => n.trim() && n.trim() !== ".gitignore");
+    if (realFiles.length === 0) return "";
     const { stdout } = await git(
       dir,
-      ["diff", root, "HEAD", "--patch", "--stat", "--no-color"],
+      ["diff", emptyTree, "HEAD", "--patch", "--stat", "--no-color"],
       32 * 1024 * 1024,
     );
     return stdout.length > 200_000 ? stdout.slice(0, 200_000) + "\n...[diff truncated]" : stdout;
@@ -201,6 +206,12 @@ export async function diffSinceStart(dir: string) {
       throw new Error(
         "The session diff is too large to review (>32MB). Review earlier, or start a fresh session for new work.",
       );
+    }
+    // No resolvable HEAD (no commits yet / damaged ref): there is nothing to
+    // diff — report "no changes" instead of leaking raw git stderr upstream.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/unknown revision|ambiguous argument|bad revision|does not have any commits/i.test(msg)) {
+      return "";
     }
     throw err;
   }
