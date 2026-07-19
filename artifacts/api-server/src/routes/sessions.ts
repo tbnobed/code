@@ -1,13 +1,22 @@
 import { Router, raw, type IRouter } from "express";
-import { eq, desc, asc } from "drizzle-orm";
+import { eq, desc, asc, and, gte, sql } from "drizzle-orm";
 import { db, sessionsTable, messagesTable } from "@workspace/db";
 import fs from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { ZipArchive } from "archiver";
 import { makePreviewToken } from "./preview";
 import path from "node:path";
 import { createWorkspace, resolveInWorkspace, languageFromPath } from "../lib/workspace";
 import { DEFAULT_MODEL } from "../lib/ollama";
 import { runAgentTurn } from "../lib/agent-loop";
+import { redactSecrets, workspaceEnv, makeStreamRedactor } from "../lib/agent-tools";
+import {
+  ensureRepo,
+  commitTurn,
+  listCheckpoints,
+  diffCheckpoint,
+  revertTo,
+} from "../lib/workspace-git";
 
 const router: IRouter = Router();
 
@@ -131,19 +140,205 @@ router.post("/sessions/:id/chat", async (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
 
+  // STOP: the client aborts its fetch, the socket closes, and we cancel the
+  // whole turn server-side (model generation + running tools).
+  const ac = new AbortController();
+  res.on("close", () => {
+    if (!res.writableEnded) ac.abort();
+  });
+
   const send = (event: Record<string, unknown>) => {
+    if (res.writableEnded || res.destroyed) return;
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
 
+  // Checkpoint any manual changes (uploads, editor saves, terminal work)
+  // separately, so each turn's diff is purely the agent's doing.
   try {
-    await runAgentTurn(session, content, send);
+    await ensureRepo(session.workspacePath);
+    await commitTurn(session.workspacePath, "manual changes");
+  } catch (err) {
+    req.log.warn({ err }, "pre-turn checkpoint failed");
+  }
+
+  try {
+    await runAgentTurn(session, content, send, ac.signal);
   } catch (err) {
     req.log.error({ err }, "agent turn failed");
     send({ type: "error", message: err instanceof Error ? err.message : "Agent failed" });
   } finally {
+    try {
+      const hash = await commitTurn(session.workspacePath, content);
+      if (hash) send({ type: "checkpoint", hash });
+    } catch (err) {
+      req.log.warn({ err }, "checkpoint commit failed");
+    }
     send({ type: "done" });
-    res.end();
+    if (!res.destroyed) res.end();
   }
+  return undefined;
+});
+
+// Checkpoints (git history of the workspace)
+router.get("/sessions/:id/checkpoints", async (req, res) => {
+  const session = await getSessionOr404(req.params.id, res);
+  if (!session) return;
+  try {
+    res.json(await listCheckpoints(session.workspacePath));
+  } catch (err) {
+    req.log.error({ err }, "checkpoint list failed");
+    res.status(500).json({ error: "Failed to list checkpoints" });
+  }
+});
+
+router.get("/sessions/:id/checkpoints/:hash/diff", async (req, res) => {
+  const session = await getSessionOr404(req.params.id, res);
+  if (!session) return;
+  try {
+    res.json({ diff: await diffCheckpoint(session.workspacePath, req.params.hash) });
+  } catch (err) {
+    req.log.warn({ err }, "checkpoint diff failed");
+    res.status(400).json({ error: "Failed to load diff" });
+  }
+});
+
+router.post("/sessions/:id/checkpoints/:hash/revert", async (req, res) => {
+  const session = await getSessionOr404(req.params.id, res);
+  if (!session) return;
+  try {
+    const commit = await revertTo(session.workspacePath, req.params.hash);
+    res.json({ ok: true, commit });
+  } catch (err) {
+    req.log.error({ err }, "checkpoint revert failed");
+    res.status(400).json({ error: "Revert failed" });
+  }
+});
+
+// Delete a message and everything after it (retry / edit-last-message)
+router.delete("/sessions/:id/messages/:messageId", async (req, res) => {
+  const session = await getSessionOr404(req.params.id, res);
+  if (!session) return;
+  const mid = Number(req.params.messageId);
+  if (!Number.isInteger(mid)) {
+    return res.status(400).json({ error: "Invalid message id" });
+  }
+  const [target] = await db
+    .select()
+    .from(messagesTable)
+    .where(and(eq(messagesTable.sessionId, session.id), eq(messagesTable.id, mid)));
+  if (!target) return res.status(404).json({ error: "Message not found" });
+  await db
+    .delete(messagesTable)
+    .where(and(eq(messagesTable.sessionId, session.id), gte(messagesTable.id, mid)));
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(messagesTable)
+    .where(eq(messagesTable.sessionId, session.id));
+  await db
+    .update(sessionsTable)
+    .set({ messageCount: row.count, updatedAt: new Date() })
+    .where(eq(sessionsTable.id, session.id));
+  return res.json({ deletedFrom: mid, remaining: row.count });
+});
+
+// Save a file from the in-app editor
+router.put("/sessions/:id/file", async (req, res) => {
+  const session = await getSessionOr404(req.params.id, res);
+  if (!session) return;
+  const { path: relPath, content } = req.body ?? {};
+  if (!relPath || typeof relPath !== "string" || typeof content !== "string") {
+    return res.status(400).json({ error: "path and content are required" });
+  }
+  if (content.length > 2_000_000) {
+    return res.status(413).json({ error: "File too large to save via the editor (2MB max)" });
+  }
+  try {
+    await fs.mkdir(session.workspacePath, { recursive: true });
+    const full = await resolveInWorkspace(session.workspacePath, relPath);
+    await fs.writeFile(full, content, "utf8");
+    return res.json({ ok: true });
+  } catch (err) {
+    req.log.warn({ err }, "file save failed");
+    return res.status(400).json({ error: "Could not save file" });
+  }
+});
+
+// User terminal: run a command in the workspace, stream output (SSE)
+router.post("/sessions/:id/exec", async (req, res) => {
+  const session = await getSessionOr404(req.params.id, res);
+  if (!session) return;
+  const { command } = req.body ?? {};
+  if (!command || typeof command !== "string") {
+    return res.status(400).json({ error: "command is required" });
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const send = (event: Record<string, unknown>) => {
+    if (res.writableEnded || res.destroyed) return;
+    res.write(`data: ${JSON.stringify(event)}\n\n`);
+  };
+
+  await fs.mkdir(session.workspacePath, { recursive: true });
+  const child = spawn("/bin/bash", ["-c", command], {
+    cwd: session.workspacePath,
+    env: workspaceEnv(), // server-only secrets stripped from user shells
+    detached: true, // own process group so we can kill the whole tree
+  });
+  const killTree = () => {
+    try {
+      if (child.pid) process.kill(-child.pid, "SIGKILL"); // negative pid = whole group
+      else child.kill("SIGKILL");
+    } catch {
+      child.kill("SIGKILL"); // group already gone or not permitted; best effort
+    }
+  };
+
+  const OUTPUT_CAP = 1_000_000;
+  let streamed = 0;
+  // Per-channel stateful redactors: they hold back partial lines so a secret
+  // split across chunk boundaries can never be emitted unredacted.
+  const redactors = { stdout: makeStreamRedactor(), stderr: makeStreamRedactor() };
+  const forward = (kind: "stdout" | "stderr") => (buf: Buffer) => {
+    if (streamed > OUTPUT_CAP) return;
+    streamed += buf.length;
+    const safe = redactors[kind].push(buf.toString("utf8"));
+    if (safe) send({ type: kind, data: safe });
+    if (streamed > OUTPUT_CAP) {
+      send({ type: "stderr", data: "\n[output cap reached — process killed]\n" });
+      killTree();
+    }
+  };
+  child.stdout.on("data", forward("stdout"));
+  child.stderr.on("data", forward("stderr"));
+
+  const timer = setTimeout(() => {
+    send({ type: "stderr", data: "\n[timed out after 5 minutes — process killed]\n" });
+    killTree();
+  }, 5 * 60_000);
+
+  res.on("close", () => {
+    if (!res.writableEnded) killTree();
+  });
+
+  child.on("close", (code) => {
+    clearTimeout(timer);
+    for (const kind of ["stdout", "stderr"] as const) {
+      const rest = redactors[kind].flush();
+      if (rest) send({ type: kind, data: rest });
+    }
+    send({ type: "exit", code });
+    if (!res.destroyed) res.end();
+  });
+  child.on("error", (err) => {
+    clearTimeout(timer);
+    send({ type: "stderr", data: String(err) });
+    send({ type: "exit", code: -1 });
+    if (!res.destroyed) res.end();
+  });
   return undefined;
 });
 

@@ -14,6 +14,9 @@ Guidelines:
 - After finishing, summarize what you built and how to use it.
 - If a command fails, read the error and fix the problem before giving up.
 - Never restate your plan or repeat text from earlier in the conversation. After a tool result, continue directly from where you left off with the next action.
+- The user can upload files into the workspace root; a note like [Uploaded to the workspace: data.csv] means those files exist — read or use them.
+- fetch_url reads a web page or API as plain text. Use it when the user shares a link or you need documentation or reference material.
+- analyze_image looks at an image file (screenshot, mockup, photo) with a vision model and reports what it shows. Use it BEFORE building UI from an uploaded mockup or screenshot.
 
 Web design standards — any website you build MUST look modern and professionally designed:
 - Always link the stylesheet with a relative path (href="styles.css", never href="/styles.css") and verify the file exists.
@@ -45,7 +48,12 @@ function isCompleteJson(s: string): boolean {
 
 type SendFn = (event: Record<string, unknown>) => void;
 
-export async function runAgentTurn(session: Session, userContent: string, send: SendFn) {
+export async function runAgentTurn(
+  session: Session,
+  userContent: string,
+  send: SendFn,
+  signal?: AbortSignal,
+) {
   // Persist user message
   await db.insert(messagesTable).values({
     sessionId: session.id,
@@ -80,120 +88,175 @@ export async function runAgentTurn(session: Session, userContent: string, send: 
 
   let newMessageCount = 1; // the user message
 
-  for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const stream = await ollama.chat.completions.create({
-      model: session.model,
-      messages,
-      tools: toolDefinitions,
-      stream: true,
-    });
+  try {
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
+      if (signal?.aborted) break;
 
-    let text = "";
-    // Accumulate tool calls across chunks
-    const toolCallsAcc: { id: string; name: string; args: string }[] = [];
-
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta;
-      if (!delta) continue;
-      if (delta.content) {
-        text += delta.content;
-        send({ type: "text", content: delta.content });
-      }
-      for (const tc of delta.tool_calls ?? []) {
-        // Some Ollama parsers emit every tool call with index 0 (ollama#16212).
-        // Detect a new call by a fresh id (or a name arriving after complete
-        // args) and start a new accumulator entry instead of concatenating.
-        let idx = tc.index ?? 0;
-        const last = toolCallsAcc[toolCallsAcc.length - 1];
-        const isNewCall =
-          (tc.id && last && last.id && tc.id !== last.id) ||
-          // Name-based split only when the previous call is unambiguously
-          // finished (complete JSON args) and this delta opens a call
-          // (name without argument continuation).
-          (tc.function?.name &&
-            !tc.function?.arguments &&
-            !tc.id &&
-            last &&
-            last.name &&
-            last.args &&
-            isCompleteJson(last.args));
-        if (isNewCall && idx < toolCallsAcc.length) {
-          idx = toolCallsAcc.length;
-        }
-        if (!toolCallsAcc[idx]) toolCallsAcc[idx] = { id: "", name: "", args: "" };
-        if (tc.id) toolCallsAcc[idx].id = tc.id;
-        if (tc.function?.name) toolCallsAcc[idx].name += tc.function.name;
-        if (tc.function?.arguments) toolCallsAcc[idx].args += tc.function.arguments;
-      }
-    }
-
-    const toolCalls = toolCallsAcc.filter(Boolean);
-
-    // Persist assistant message
-    const assistantToolCalls = toolCalls.length
-      ? toolCalls.map((tc, idx) => ({
-          id: tc.id || `call_${Date.now()}_${idx}`,
-          type: "function" as const,
-          function: { name: tc.name, arguments: tc.args },
-        }))
-      : undefined;
-
-    await db.insert(messagesTable).values({
-      sessionId: session.id,
-      role: "assistant",
-      content: text,
-      toolCalls: assistantToolCalls ? JSON.stringify(assistantToolCalls) : null,
-    });
-    newMessageCount++;
-
-    if (!assistantToolCalls) {
-      break; // Model is done — plain text response
-    }
-
-    messages.push({
-      role: "assistant",
-      content: text || null,
-      tool_calls: assistantToolCalls,
-    });
-
-    // Execute each tool call
-    for (const tc of assistantToolCalls) {
-      let args: Record<string, unknown> = {};
+      let stream;
       try {
-        args = JSON.parse(tc.function.arguments || "{}");
-      } catch {
-        // fall through with empty args; tool will report the problem
+        stream = await ollama.chat.completions.create(
+          {
+            model: session.model,
+            messages,
+            tools: toolDefinitions,
+            stream: true,
+          },
+          // Aborting also drops the HTTP connection to Ollama, which stops
+          // GPU generation server-side.
+          signal ? { signal } : undefined,
+        );
+      } catch (err) {
+        if (signal?.aborted) break;
+        throw err;
       }
-      send({
-        type: "tool_call",
-        name: tc.function.name,
-        arguments: JSON.stringify(args),
-      });
 
-      const { result, isError } = await executeTool(
-        session.workspacePath,
-        tc.function.name,
-        args,
-      );
-      send({ type: "tool_result", name: tc.function.name, result, isError });
+      let text = "";
+      // Accumulate tool calls across chunks
+      const toolCallsAcc: { id: string; name: string; args: string }[] = [];
+      let abortedMidStream = false;
+
+      try {
+        for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta;
+          if (!delta) continue;
+          if (delta.content) {
+            text += delta.content;
+            send({ type: "text", content: delta.content });
+          }
+          for (const tc of delta.tool_calls ?? []) {
+            // Some Ollama parsers emit every tool call with index 0 (ollama#16212).
+            // Detect a new call by a fresh id (or a name arriving after complete
+            // args) and start a new accumulator entry instead of concatenating.
+            let idx = tc.index ?? 0;
+            const last = toolCallsAcc[toolCallsAcc.length - 1];
+            const isNewCall =
+              (tc.id && last && last.id && tc.id !== last.id) ||
+              // Name-based split only when the previous call is unambiguously
+              // finished (complete JSON args) and this delta opens a call
+              // (name without argument continuation).
+              (tc.function?.name &&
+                !tc.function?.arguments &&
+                !tc.id &&
+                last &&
+                last.name &&
+                last.args &&
+                isCompleteJson(last.args));
+            if (isNewCall && idx < toolCallsAcc.length) {
+              idx = toolCallsAcc.length;
+            }
+            if (!toolCallsAcc[idx]) toolCallsAcc[idx] = { id: "", name: "", args: "" };
+            if (tc.id) toolCallsAcc[idx].id = tc.id;
+            if (tc.function?.name) toolCallsAcc[idx].name += tc.function.name;
+            if (tc.function?.arguments) toolCallsAcc[idx].args += tc.function.arguments;
+          }
+        }
+      } catch (err) {
+        if (signal?.aborted) abortedMidStream = true;
+        else throw err;
+      }
+
+      if (abortedMidStream || signal?.aborted) {
+        // Stopped mid-generation: keep the text that streamed, but DROP
+        // half-received tool calls — a tool_call without a tool result
+        // would corrupt the transcript for every later turn.
+        if (text.trim()) {
+          await db.insert(messagesTable).values({
+            sessionId: session.id,
+            role: "assistant",
+            content: `${text}\n\n[Stopped by user]`,
+          });
+          newMessageCount++;
+        }
+        break;
+      }
+
+      const toolCalls = toolCallsAcc.filter(Boolean);
+
+      // Persist assistant message
+      const assistantToolCalls = toolCalls.length
+        ? toolCalls.map((tc, idx) => ({
+            id: tc.id || `call_${Date.now()}_${idx}`,
+            type: "function" as const,
+            function: { name: tc.name, arguments: tc.args },
+          }))
+        : undefined;
 
       await db.insert(messagesTable).values({
         sessionId: session.id,
-        role: "tool",
-        content: result,
-        toolCallId: tc.id,
+        role: "assistant",
+        content: text,
+        toolCalls: assistantToolCalls ? JSON.stringify(assistantToolCalls) : null,
       });
       newMessageCount++;
 
-      messages.push({ role: "tool", content: result, tool_call_id: tc.id });
-    }
-  }
+      if (!assistantToolCalls) {
+        break; // Model is done — plain text response
+      }
 
-  await db
-    .update(sessionsTable)
-    .set({
-      messageCount: sql`${sessionsTable.messageCount} + ${newMessageCount}`,
-      updatedAt: new Date(),
-    })
-    .where(eq(sessionsTable.id, session.id));
+      messages.push({
+        role: "assistant",
+        content: text || null,
+        tool_calls: assistantToolCalls,
+      });
+
+      // Execute each tool call
+      for (const tc of assistantToolCalls) {
+        if (signal?.aborted) {
+          // Synthetic result so every persisted tool_call has a matching
+          // tool message — keeps history valid for future turns.
+          const cancelled = "[cancelled by user before execution]";
+          await db.insert(messagesTable).values({
+            sessionId: session.id,
+            role: "tool",
+            content: cancelled,
+            toolCallId: tc.id,
+          });
+          newMessageCount++;
+          messages.push({ role: "tool", content: cancelled, tool_call_id: tc.id });
+          continue;
+        }
+
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(tc.function.arguments || "{}");
+        } catch {
+          // fall through with empty args; tool will report the problem
+        }
+        send({
+          type: "tool_call",
+          name: tc.function.name,
+          arguments: JSON.stringify(args),
+        });
+
+        const { result, isError } = await executeTool(
+          session.workspacePath,
+          tc.function.name,
+          args,
+          signal,
+        );
+        send({ type: "tool_result", name: tc.function.name, result, isError });
+
+        await db.insert(messagesTable).values({
+          sessionId: session.id,
+          role: "tool",
+          content: result,
+          toolCallId: tc.id,
+        });
+        newMessageCount++;
+
+        messages.push({ role: "tool", content: result, tool_call_id: tc.id });
+      }
+
+      if (signal?.aborted) break;
+    }
+  } finally {
+    // Runs even when the turn is stopped or crashes, so counts stay right.
+    await db
+      .update(sessionsTable)
+      .set({
+        messageCount: sql`${sessionsTable.messageCount} + ${newMessageCount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(sessionsTable.id, session.id));
+  }
 }

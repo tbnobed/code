@@ -33,7 +33,8 @@ app.use(
   }),
 );
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+// 5mb: the in-app file editor saves whole files as JSON.
+app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
 

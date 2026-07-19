@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useGetSession, useListWorkspaceFiles, useReadWorkspaceFile } from "@workspace/api-client-react";
-import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download, Paperclip, Upload, X } from "lucide-react";
+import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download, Paperclip, Upload, X, Pencil, Save, Square, RotateCcw, GitCommitHorizontal, SquareTerminal } from "lucide-react";
 import { useChatStream } from "@/hooks/use-chat-stream";
+import CheckpointsPanel from "@/components/forge/CheckpointsPanel";
+import TerminalPanel from "@/components/forge/TerminalPanel";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -120,15 +122,24 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
   };
 
   const WRITE_TOOLS = ["create_file", "edit_file", "run_command"];
-  const { sendChat, isStreaming, streamingText, activeToolCall, error } = useChatStream({
+  const refreshWorkspaceState = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(sessionId) });
+    queryClient.invalidateQueries({ queryKey: getListWorkspaceFilesQueryKey(sessionId) });
+    queryClient.invalidateQueries({ queryKey: ["checkpoints", sessionId] });
+    setPreviewKey((k) => k + 1);
+  }, [queryClient, sessionId]);
+
+  const { sendChat, isStreaming, streamingText, activeToolCall, error, stopStream } = useChatStream({
     sessionId,
-    onDone: () => {
-      queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(sessionId) });
-      queryClient.invalidateQueries({ queryKey: getListWorkspaceFilesQueryKey(sessionId) });
-      setPreviewKey((k) => k + 1);
-    },
+    onDone: refreshWorkspaceState,
     onToolResult: (name) => {
       if (WRITE_TOOLS.includes(name)) scheduleWorkspaceRefresh();
+    },
+    onStopped: () => {
+      // The server persists the partial turn + a checkpoint after the socket
+      // drops; refresh twice to catch both.
+      setTimeout(refreshWorkspaceState, 400);
+      setTimeout(refreshWorkspaceState, 1500);
     },
   });
 
@@ -155,8 +166,34 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const readFile = useReadWorkspaceFile();
   const [fileContent, setFileContent] = useState<{content: string, language: string} | null>(null);
+  const [editDraft, setEditDraft] = useState<string | null>(null);
+  const [isSavingFile, setIsSavingFile] = useState(false);
+  const [sideTab, setSideTab] = useState<"files" | "checkpoints" | "terminal">("files");
+
+  const handleSaveFile = async () => {
+    if (selectedFile === null || editDraft === null) return;
+    setIsSavingFile(true);
+    try {
+      const r = await fetch(`${import.meta.env.BASE_URL}api/sessions/${sessionId}/file`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: selectedFile, content: editDraft }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setFileContent((fc) => (fc ? { ...fc, content: editDraft } : fc));
+      setEditDraft(null);
+      queryClient.invalidateQueries({ queryKey: getListWorkspaceFilesQueryKey(sessionId) });
+      setPreviewKey((k) => k + 1);
+    } catch {
+      // Keep the draft so nothing typed is lost; the user can retry.
+    } finally {
+      setIsSavingFile(false);
+    }
+  };
 
   useEffect(() => {
+    setEditDraft(null); // switching files discards any unsaved draft
     if (selectedFile) {
       readFile.mutate({ id: sessionId, data: { path: selectedFile } }, {
         onSuccess: (data) => {
@@ -192,6 +229,26 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
     setInput("");
     setAttachedFiles([]);
     sendChat(messageContent);
+  };
+
+  // Retry / edit the last user message: the server deletes that message and
+  // everything after it; retry resends the same content, edit refills input.
+  const deleteFromMessage = async (messageId: number) => {
+    await fetch(`${import.meta.env.BASE_URL}api/sessions/${sessionId}/messages/${messageId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    await queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(sessionId) });
+  };
+  const handleRetry = async (messageId: number, content: string) => {
+    if (isStreaming || isUploading) return;
+    await deleteFromMessage(messageId);
+    sendChat(content);
+  };
+  const handleEditLast = async (messageId: number, content: string) => {
+    if (isStreaming || isUploading) return;
+    await deleteFromMessage(messageId);
+    setInput(content);
   };
 
   if (isLoadingSession) {
@@ -267,6 +324,10 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
     // Standard user or plain assistant message
     return <div className="whitespace-pre-wrap text-sm">{msg.content}</div>;
   };
+
+  const lastUserMessageId = [...(sessionData.messages ?? [])]
+    .reverse()
+    .find((m) => m.role === "user")?.id;
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-background">
@@ -391,6 +452,29 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                   )}>
                     {renderMessageContent(msg)}
                   </div>
+
+                  {msg.role === "user" && msg.id === lastUserMessageId && !isStreaming && (
+                    <div className="flex gap-1 justify-end mt-0.5">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 font-mono text-[9px] tracking-widest text-muted-foreground hover:text-primary"
+                        title="Delete the agent's response and run this message again"
+                        onClick={() => handleRetry(msg.id, msg.content)}
+                      >
+                        <RotateCcw className="w-3 h-3 mr-1" /> RETRY
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 font-mono text-[9px] tracking-widest text-muted-foreground hover:text-primary"
+                        title="Delete this message and its response, then edit it"
+                        onClick={() => handleEditLast(msg.id, msg.content)}
+                      >
+                        <Pencil className="w-3 h-3 mr-1" /> EDIT
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
 
@@ -502,6 +586,18 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                 autoFocus
               />
               <div className="absolute right-2 top-2 flex items-center gap-1">
+                {isStreaming && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => stopStream()}
+                    title="Stop the agent (cancels generation and running commands)"
+                    className="h-8 font-mono tracking-widest text-[10px] rounded-sm px-3 gap-1.5"
+                  >
+                    <Square className="w-3 h-3 fill-current" /> STOP
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="ghost"
@@ -538,21 +634,65 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                   <FileCode2 className="w-4 h-4 text-primary shrink-0" />
                   <span className="font-mono text-xs font-medium truncate">{selectedFile.split('/').pop()}</span>
                 </div>
-                <Button variant="ghost" size="icon" className="w-6 h-6 hover:bg-background" onClick={() => setSelectedFile(null)}>
-                  <span className="sr-only">Close</span>
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  {fileContent && !readFile.isPending && (
+                    editDraft === null ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 font-mono text-[9px] tracking-widest text-muted-foreground hover:text-primary"
+                        onClick={() => setEditDraft(fileContent.content)}
+                      >
+                        <Pencil className="w-3 h-3 mr-1" /> EDIT
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={isSavingFile}
+                          className="h-6 px-2 font-mono text-[9px] tracking-widest text-muted-foreground"
+                          onClick={() => setEditDraft(null)}
+                        >
+                          CANCEL
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={isSavingFile}
+                          className="h-6 px-2 font-mono text-[9px] tracking-widest rounded-sm"
+                          onClick={handleSaveFile}
+                        >
+                          {isSavingFile ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Save className="w-3 h-3 mr-1" /> SAVE</>}
+                        </Button>
+                      </>
+                    )
+                  )}
+                  <Button variant="ghost" size="icon" className="w-6 h-6 hover:bg-background" onClick={() => setSelectedFile(null)}>
+                    <span className="sr-only">Close</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
               
               <div className="flex-1 overflow-hidden relative">
                 {readFile.isPending ? (
                   <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-6 h-6 text-muted-foreground animate-spin" /></div>
                 ) : fileContent ? (
+                  editDraft !== null ? (
+                    <textarea
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      spellCheck={false}
+                      autoFocus
+                      className="absolute inset-0 w-full h-full p-4 text-[11px] font-mono leading-relaxed bg-background text-foreground resize-none outline-none"
+                    />
+                  ) : (
                   <ScrollArea className="h-full">
                     <pre className="p-4 text-[11px] font-mono leading-relaxed text-foreground bg-background min-h-full">
                       <code>{fileContent.content}</code>
                     </pre>
                   </ScrollArea>
+                  )
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-xs font-mono">Failed to read file</div>
                 )}
@@ -560,11 +700,47 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
             </div>
           )}
 
-          <div className="p-3 border-b border-border shrink-0 bg-muted/50 flex items-center justify-between">
-            <h3 className="font-mono text-xs font-bold tracking-widest text-muted-foreground flex items-center gap-2">
-              <HardDrive className="w-3.5 h-3.5" />
-              WORKSPACE_FILES
-            </h3>
+          <div className="border-b border-border shrink-0 bg-muted/50 flex">
+            {([
+              { id: "files", label: "FILES", Icon: HardDrive },
+              { id: "checkpoints", label: "CHECKPOINTS", Icon: GitCommitHorizontal },
+              { id: "terminal", label: "TERMINAL", Icon: SquareTerminal },
+            ] as const).map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                onClick={() => setSideTab(id)}
+                className={cn(
+                  "flex-1 px-1 py-2.5 font-mono text-[9px] font-bold tracking-widest flex items-center justify-center gap-1 border-b-2 transition-colors",
+                  sideTab === id
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="w-3.5 h-3.5" /> {label}
+              </button>
+            ))}
+          </div>
+
+          {sideTab === "checkpoints" && (
+            <CheckpointsPanel sessionId={sessionId} onReverted={refreshWorkspaceState} />
+          )}
+
+          {sideTab === "terminal" && (
+            <TerminalPanel
+              sessionId={sessionId}
+              onWorkspaceChanged={() => {
+                queryClient.invalidateQueries({ queryKey: getListWorkspaceFilesQueryKey(sessionId) });
+                setPreviewKey((k) => k + 1);
+              }}
+            />
+          )}
+
+          {sideTab === "files" && (
+          <>
+          <div className="px-3 py-1.5 border-b border-border shrink-0 flex items-center justify-between">
+            <span className="font-mono text-[9px] tracking-widest text-muted-foreground">
+              {files?.length ?? 0} FILE{(files?.length ?? 0) === 1 ? "" : "S"} IN WORKSPACE
+            </span>
             {!!files?.length && (
               <Button
                 variant="ghost"
@@ -618,6 +794,8 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
               )}
             </div>
           </ScrollArea>
+          </>
+          )}
         </div>
       </div>
     </div>

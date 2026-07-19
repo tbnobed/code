@@ -1,0 +1,127 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import fs from "node:fs/promises";
+import path from "node:path";
+
+const run = promisify(execFile);
+
+const HASH_RE = /^[0-9a-f]{7,40}$/i;
+
+function git(dir: string, args: string[], maxBuffer = 10 * 1024 * 1024) {
+  return run("git", ["-C", dir, ...args], { maxBuffer });
+}
+
+/** Initialize the workspace checkpoint repo if missing; safe to call repeatedly. */
+export async function ensureRepo(dir: string) {
+  await fs.mkdir(dir, { recursive: true });
+  try {
+    await fs.stat(path.join(dir, ".git"));
+    return;
+  } catch {
+    // not a repo yet
+  }
+  await git(dir, ["init", "-q"]);
+  // Keep bulky/transient dirs out of checkpoints — but never stomp a
+  // .gitignore the project already has.
+  const gi = path.join(dir, ".gitignore");
+  try {
+    await fs.stat(gi);
+  } catch {
+    await fs.writeFile(gi, "node_modules/\n.env\n");
+  }
+  await git(dir, ["add", "-A"]);
+  await git(dir, ["commit", "-q", "--allow-empty", "-m", "forge: initial checkpoint"]);
+}
+
+/**
+ * Commit all current changes as a checkpoint.
+ * Returns the new commit hash, or null if the workspace was clean.
+ */
+export async function commitTurn(dir: string, label: string) {
+  await ensureRepo(dir);
+  await git(dir, ["add", "-A"]);
+  try {
+    await git(dir, ["diff", "--cached", "--quiet"]);
+    return null; // nothing changed
+  } catch {
+    // differences exist — commit them
+  }
+  const subject = `forge: ${label.replace(/\s+/g, " ").trim().slice(0, 72) || "checkpoint"}`;
+  await git(dir, ["commit", "-q", "-m", subject]);
+  const { stdout } = await git(dir, ["rev-parse", "HEAD"]);
+  return stdout.trim();
+}
+
+export interface Checkpoint {
+  hash: string;
+  shortHash: string;
+  subject: string;
+  timestamp: string;
+  filesChanged: number;
+}
+
+export async function listCheckpoints(dir: string): Promise<Checkpoint[]> {
+  try {
+    await fs.stat(path.join(dir, ".git"));
+  } catch {
+    return [];
+  }
+  const { stdout } = await git(dir, [
+    "log",
+    "-n",
+    "50",
+    "--shortstat",
+    "--pretty=format:@@%H%x09%ct%x09%s",
+  ]);
+  const out: Checkpoint[] = [];
+  for (const line of stdout.split("\n")) {
+    if (line.startsWith("@@")) {
+      const [hash, ct, ...rest] = line.slice(2).split("\t");
+      out.push({
+        hash,
+        shortHash: hash.slice(0, 7),
+        subject: rest.join("\t").replace(/^forge: /, ""),
+        timestamp: new Date(Number(ct) * 1000).toISOString(),
+        filesChanged: 0,
+      });
+    } else {
+      const m = line.match(/(\d+) files? changed/);
+      if (m && out.length) out[out.length - 1].filesChanged = Number(m[1]);
+    }
+  }
+  return out;
+}
+
+/** Unified diff (patch + stat) for one checkpoint, size-capped. */
+export async function diffCheckpoint(dir: string, hash: string) {
+  if (!HASH_RE.test(hash)) throw new Error("Invalid checkpoint id");
+  const { stdout } = await git(dir, ["show", hash, "--patch", "--stat", "--no-color"], 5 * 1024 * 1024);
+  return stdout.length > 200_000 ? stdout.slice(0, 200_000) + "\n...[diff truncated]" : stdout;
+}
+
+/**
+ * Restore the workspace to a checkpoint's state — recorded as a NEW commit
+ * on top of history (never rewrites it), so the user can jump back forward.
+ * Returns the new commit hash, or null if already at that state.
+ */
+export async function revertTo(dir: string, hash: string) {
+  if (!HASH_RE.test(hash)) throw new Error("Invalid checkpoint id");
+  const { stdout } = await git(dir, ["rev-parse", "HEAD"]);
+  const head = stdout.trim();
+  await git(dir, ["reset", "--hard", hash]);
+  // Remove files created after the target checkpoint (but never installs).
+  await git(dir, ["clean", "-fd", "-e", "node_modules"]);
+  // Move HEAD back to the tip while keeping the restored working tree,
+  // then commit that state forward.
+  await git(dir, ["reset", "--soft", head]);
+  await git(dir, ["add", "-A"]);
+  try {
+    await git(dir, ["diff", "--cached", "--quiet"]);
+    return null; // already identical
+  } catch {
+    // differences exist
+  }
+  await git(dir, ["commit", "-q", "-m", `forge: revert to ${hash.slice(0, 7)}`]);
+  const r = await git(dir, ["rev-parse", "HEAD"]);
+  return r.stdout.trim();
+}
