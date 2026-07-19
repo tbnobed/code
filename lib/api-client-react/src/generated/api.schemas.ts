@@ -33,6 +33,8 @@ export interface Capabilities {
   review: boolean;
   /** Model used for reviews, present when review is true. */
   reviewModel?: string;
+  /** Whether local image generation (generate_image tool) is configured. */
+  imageGen: boolean;
 }
 
 export interface Message {
@@ -121,4 +123,8 @@ export interface PasswordBody {
 export interface ApiError {
   error: string;
 }
+
+export type ReadWorkspaceFileRawParams = {
+path: string;
+};
 

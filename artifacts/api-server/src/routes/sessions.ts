@@ -419,6 +419,37 @@ router.post("/sessions/:id/exec", async (req, res) => {
 });
 
 // Workspace file listing
+// Raw file bytes (images and other binaries) for the file viewer and chat
+// thumbnails. sendFile with `root` jails the path inside the workspace and
+// rejects traversal attempts.
+router.get("/sessions/:id/file/raw", async (req, res) => {
+  const session = await getSessionOr404(req, res);
+  if (!session) return;
+  const rel = String(req.query.path ?? "").trim();
+  if (!rel) {
+    res.status(400).json({ error: "path query parameter is required" });
+    return;
+  }
+  // Realpath containment via resolveInWorkspace — sendFile's `root` option is
+  // only a lexical check and is escapable through symlinks created inside the
+  // workspace (e.g. via run_command or the terminal).
+  let abs: string;
+  try {
+    abs = await resolveInWorkspace(session.workspacePath, rel);
+    const st = await fs.stat(abs);
+    if (!st.isFile()) throw new Error("not a file");
+  } catch {
+    res.status(404).json({ error: "File not found" });
+    return;
+  }
+  res.setHeader("Cache-Control", "no-store");
+  // dotfiles are legitimate workspace files (.env, .gitignore) — containment is
+  // already enforced by the realpath check above, not by name filtering.
+  res.sendFile(abs, { dotfiles: "allow" }, (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: "File not found" });
+  });
+});
+
 router.get("/sessions/:id/files", async (req, res) => {
   const session = await getSessionOr404(req, res);
   if (!session) return;

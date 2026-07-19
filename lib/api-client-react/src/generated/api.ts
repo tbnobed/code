@@ -29,6 +29,7 @@ import type {
   Message,
   OllamaModel,
   PasswordBody,
+  ReadWorkspaceFileRawParams,
   Session,
   SessionInput,
   SessionWithMessages,
@@ -1166,6 +1167,95 @@ export const useReviewSession = <TError = ErrorType<void>,
       > => {
       return useMutation(getReviewSessionMutationOptions(options));
     }
+
+export const getReadWorkspaceFileRawUrl = (id: number,
+    params: ReadWorkspaceFileRawParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/sessions/${id}/file/raw?${stringifiedParams}` : `/api/sessions/${id}/file/raw`
+}
+
+/**
+ * @summary Raw bytes of a workspace file (images etc.)
+ */
+export const readWorkspaceFileRaw = async (id: number,
+    params: ReadWorkspaceFileRawParams, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getReadWorkspaceFileRawUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getReadWorkspaceFileRawQueryKey = (id: number,
+    params?: ReadWorkspaceFileRawParams,) => {
+    return [
+    `/api/sessions/${id}/file/raw`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getReadWorkspaceFileRawQueryOptions = <TData = Awaited<ReturnType<typeof readWorkspaceFileRaw>>, TError = ErrorType<void>>(id: number,
+    params: ReadWorkspaceFileRawParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof readWorkspaceFileRaw>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getReadWorkspaceFileRawQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof readWorkspaceFileRaw>>> = ({ signal }) => readWorkspaceFileRaw(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof readWorkspaceFileRaw>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ReadWorkspaceFileRawQueryResult = NonNullable<Awaited<ReturnType<typeof readWorkspaceFileRaw>>>
+export type ReadWorkspaceFileRawQueryError = ErrorType<void>
+
+
+/**
+ * @summary Raw bytes of a workspace file (images etc.)
+ */
+
+export function useReadWorkspaceFileRaw<TData = Awaited<ReturnType<typeof readWorkspaceFileRaw>>, TError = ErrorType<void>>(
+ id: number,
+    params: ReadWorkspaceFileRawParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof readWorkspaceFileRaw>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getReadWorkspaceFileRawQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListWorkspaceFilesUrl = (id: number,) => {
 

@@ -4,6 +4,10 @@ import { db, sessionsTable, messagesTable, type Session } from "@workspace/db";
 import { ollama, OLLAMA_BASE_URL } from "./ollama";
 import { toolDefinitions, executeTool, ARCHITECT_MODEL } from "./agent-tools";
 import { githubEnabled } from "./git-setup";
+import { imageGenAvailable } from "./image-gen";
+
+const IMAGE_GEN_NOTE =
+  "\n- A local image generator is available through the generate_image tool. When the project needs visual assets (logos, icons, hero or background images, textures), generate real ones instead of using placeholders or external URLs.";
 
 const SYSTEM_PROMPT = `You are Forge, an autonomous coding agent running locally. You help the user build software by creating files, editing them, and running commands inside a sandboxed workspace directory.
 
@@ -70,7 +74,7 @@ export async function runAgentTurn(
     .orderBy(asc(messagesTable.id));
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: SYSTEM_PROMPT + (imageGenAvailable() ? IMAGE_GEN_NOTE : "") },
   ];
   for (const m of history) {
     if (m.role === "user") {

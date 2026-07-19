@@ -11,7 +11,7 @@ Self-hosted agentic coding assistant (a private "Replit Agent") that runs entire
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only; prod migrates via schema-init at boot)
 - Required env: `DATABASE_URL` — Postgres connection string; `SESSION_SECRET`; `ADMIN_PASSWORD` (first boot)
-- Optional env: `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_ARCHITECT_MODEL`, `OLLAMA_VISION_MODEL`; `ANTHROPIC_API_KEY` (+ `ANTHROPIC_BASE_URL`, `ANTHROPIC_REVIEW_MODEL`) enables "Send for review"
+- Optional env: `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_ARCHITECT_MODEL`, `OLLAMA_VISION_MODEL`; `ANTHROPIC_API_KEY` (+ `ANTHROPIC_BASE_URL`, `ANTHROPIC_REVIEW_MODEL`) enables "Send for review"; `IMAGE_GEN_URL` (+ `IMAGE_GEN_PROVIDER`/`IMAGE_GEN_MODEL`/`IMAGE_GEN_STEPS`/`IMAGE_GEN_TIMEOUT_MS`) enables the local Stable Diffusion `generate_image` tool (A1111 `--api` or ComfyUI)
 - Production: `docker compose up -d --build` on the DGX (app on port 3000)
 
 ## Stack
@@ -48,6 +48,7 @@ Self-hosted agentic coding assistant (a private "Replit Agent") that runs entire
 - Architect mode: a second, deep-reasoning model for whole-turn consultation (Brain toggle in the composer).
 - Per-turn git checkpoints with diff view and revert; built-in terminal; editable file viewer; live site preview; workspace zip download.
 - Send for review: one click ships the session's full diff to Claude for a structured external code review, streamed into chat and saved in history.
+- Image generation: opt-in `generate_image` tool backed by a local Stable Diffusion server (AUTOMATIC1111 or ComfyUI, auto-detected); saves PNGs into the workspace, thumbnails render in chat and the file viewer displays images.
 
 ## User preferences
 

@@ -192,6 +192,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
     ? `${import.meta.env.BASE_URL}api/sessions/${sessionId}/preview/${previewToken}/`
     : null;
 
+  const IMAGE_FILE_RE = /\.(png|jpe?g|gif|webp|bmp|avif|svg)$/i;
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const readFile = useReadWorkspaceFile();
   const [fileContent, setFileContent] = useState<{content: string, language: string} | null>(null);
@@ -224,6 +225,10 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
   useEffect(() => {
     setEditDraft(null); // switching files discards any unsaved draft
     if (selectedFile) {
+      if (IMAGE_FILE_RE.test(selectedFile)) {
+        setFileContent(null); // images render straight from the raw endpoint
+        return;
+      }
       readFile.mutate({ id: sessionId, data: { path: selectedFile } }, {
         onSuccess: (data) => {
           setFileContent({ content: data.content, language: data.language });
@@ -345,6 +350,22 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                   <div className="p-3 bg-background font-mono text-xs text-muted-foreground overflow-x-auto whitespace-pre">
                     {call.function?.arguments || '{}'}
                   </div>
+                  {call.function?.name === "generate_image" && (() => {
+                    try {
+                      const imgPath = JSON.parse(call.function?.arguments || "{}").path;
+                      if (typeof imgPath === "string" && imgPath) {
+                        return (
+                          <img
+                            src={`${import.meta.env.BASE_URL}api/sessions/${sessionId}/file/raw?path=${encodeURIComponent(imgPath)}`}
+                            alt={imgPath}
+                            className="max-h-64 w-auto m-3 mt-2 border border-border rounded-sm"
+                            onError={(e) => { e.currentTarget.style.display = "none"; }}
+                          />
+                        );
+                      }
+                    } catch { /* unparseable args — skip the thumbnail */ }
+                    return null;
+                  })()}
                 </div>
               ))}
             </div>
@@ -744,7 +765,17 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
               </div>
               
               <div className="flex-1 overflow-hidden relative">
-                {readFile.isPending ? (
+                {IMAGE_FILE_RE.test(selectedFile) ? (
+                  <ScrollArea className="h-full">
+                    <div className="p-4 flex items-start justify-center bg-background min-h-full">
+                      <img
+                        src={`${import.meta.env.BASE_URL}api/sessions/${sessionId}/file/raw?path=${encodeURIComponent(selectedFile)}`}
+                        alt={selectedFile}
+                        className="max-w-full h-auto border border-border rounded-sm"
+                      />
+                    </div>
+                  </ScrollArea>
+                ) : readFile.isPending ? (
                   <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-6 h-6 text-muted-foreground animate-spin" /></div>
                 ) : fileContent ? (
                   editDraft !== null ? (

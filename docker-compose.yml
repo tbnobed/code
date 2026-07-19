@@ -19,6 +19,15 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
       ANTHROPIC_REVIEW_MODEL: ${ANTHROPIC_REVIEW_MODEL:-claude-sonnet-4-6}
+      # Optional: local image generation via Stable Diffusion. Point at an
+      # AUTOMATIC1111-compatible WebUI launched with --api (usually
+      # http://host.docker.internal:7860) or a ComfyUI server (usually
+      # http://host.docker.internal:8188). Feature hidden when unset.
+      IMAGE_GEN_URL: ${IMAGE_GEN_URL:-}
+      IMAGE_GEN_PROVIDER: ${IMAGE_GEN_PROVIDER:-auto}
+      IMAGE_GEN_MODEL: ${IMAGE_GEN_MODEL:-}
+      IMAGE_GEN_STEPS: ${IMAGE_GEN_STEPS:-20}
+      IMAGE_GEN_TIMEOUT_MS: ${IMAGE_GEN_TIMEOUT_MS:-180000}
       # Optional: enables the agent's GitHub push/pull sync (fine-grained PAT
       # with Contents read/write on the repos you want it to touch)
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}

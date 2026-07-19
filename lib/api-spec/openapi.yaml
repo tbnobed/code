@@ -326,6 +326,33 @@ paths:
         "503":
           description: Review is not configured on this server
 
+  /sessions/{id}/file/raw:
+    get:
+      operationId: readWorkspaceFileRaw
+      tags: [workspace]
+      summary: Raw bytes of a workspace file (images etc.)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Not found
+
   /sessions/{id}/files:
     get:
       operationId: listWorkspaceFiles
@@ -467,8 +494,12 @@ components:
         reviewModel:
           type: string
           description: Model used for reviews, present when review is true.
+        imageGen:
+          type: boolean
+          description: Whether local image generation (generate_image tool) is configured.
       required:
         - review
+        - imageGen
 
     SessionWithMessages:
       type: object

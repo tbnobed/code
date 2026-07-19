@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import type OpenAI from "openai";
 import { resolveInWorkspace } from "./workspace";
 import { OLLAMA_BASE_URL } from "./ollama";
+import { clampDimension, generateImage, imageGenAvailable } from "./image-gen";
 
 export const toolDefinitions: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
@@ -135,6 +136,36 @@ export const toolDefinitions: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     },
   },
 ];
+
+// Local image generation is opt-in (IMAGE_GEN_URL). The tool stays out of the
+// schema entirely when unconfigured so the model never tries to call it.
+if (imageGenAvailable()) {
+  toolDefinitions.push({
+    type: "function",
+    function: {
+      name: "generate_image",
+      description:
+        "Generate an image with the local Stable Diffusion server and save it into the workspace as a PNG. Use it for app assets: logos, icons, hero/background images, textures, illustrations. Write a detailed visual prompt (subject, style, colors, lighting, composition). Generation can take 10-60+ seconds, so only generate assets the app really needs.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "Detailed visual description of the image" },
+          path: {
+            type: "string",
+            description: 'Workspace-relative output path ending in .png, e.g. "assets/logo.png"',
+          },
+          width: { type: "number", description: "Width in pixels (256-2048, default 1024)" },
+          height: { type: "number", description: "Height in pixels (256-2048, default 1024)" },
+          negative_prompt: {
+            type: "string",
+            description: "Things to avoid in the image (optional)",
+          },
+        },
+        required: ["prompt", "path"],
+      },
+    },
+  });
+}
 
 const MAX_OUTPUT = 16_000;
 
@@ -383,6 +414,35 @@ export async function executeTool(
           child.on("close", (code) => finish(code));
           child.on("error", (err) => finish(null, err));
         });
+      }
+      case "generate_image": {
+        const rel = String(args.path ?? "").trim();
+        if (!rel || !/\.png$/i.test(rel)) {
+          return {
+            result: `Provide a workspace-relative output path ending in .png (got "${rel || "nothing"}")`,
+            isError: true,
+          };
+        }
+        const prompt = String(args.prompt ?? "").trim();
+        if (!prompt) {
+          return { result: "Provide a prompt describing the image to generate", isError: true };
+        }
+        const p = await resolveInWorkspace(workspaceDir, rel);
+        const { png, width, height, provider } = await generateImage(
+          {
+            prompt,
+            negativePrompt: args.negative_prompt ? String(args.negative_prompt) : undefined,
+            width: clampDimension(args.width),
+            height: clampDimension(args.height),
+          },
+          signal,
+        );
+        await fs.mkdir(path.dirname(p), { recursive: true });
+        await fs.writeFile(p, png);
+        return {
+          result: `Generated ${width}x${height} image via ${provider} → ${rel} (${Math.max(1, Math.round(png.length / 1024))} KB)`,
+          isError: false,
+        };
       }
       case "fetch_url": {
         const rawUrl = String(args.url ?? "").trim();

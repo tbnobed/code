@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { OLLAMA_BASE_URL } from "../lib/ollama";
 import { REVIEW_MODEL, reviewAvailable } from "../lib/anthropic";
+import { imageGenAvailable } from "../lib/image-gen";
 
 const router: IRouter = Router();
 
@@ -30,6 +31,7 @@ router.get("/capabilities", (_req, res) => {
   res.json({
     review: reviewAvailable(),
     ...(reviewAvailable() ? { reviewModel: REVIEW_MODEL } : {}),
+    imageGen: imageGenAvailable(),
   });
 });
 
