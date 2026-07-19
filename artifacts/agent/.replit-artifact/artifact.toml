@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "Coding Agent"
+version = "1.0.0"
+id = "artifacts/agent"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25519
+
+[services.development]
+run = "pnpm --filter @workspace/agent run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/agent", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/agent/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25519"
+BASE_PATH = "/"

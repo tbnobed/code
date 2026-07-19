@@ -1,0 +1,22 @@
+import { pgTable, text, serial, integer, timestamp } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+
+export const sessionsTable = pgTable("sessions", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  model: text("model").notNull().default("qwen3-coder-next"),
+  workspacePath: text("workspace_path").notNull(),
+  messageCount: integer("message_count").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const insertSessionSchema = createInsertSchema(sessionsTable).omit({
+  id: true,
+  messageCount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertSession = z.infer<typeof insertSessionSchema>;
+export type Session = typeof sessionsTable.$inferSelect;

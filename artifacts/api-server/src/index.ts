@@ -1,5 +1,9 @@
 import app from "./app";
+import { ensureSessionTable } from "./lib/auth";
 import { logger } from "./lib/logger";
+
+// Make sure the session store table exists before accepting traffic.
+await ensureSessionTable;
 
 const rawPort = process.env["PORT"];
 

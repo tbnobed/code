@@ -1,0 +1,46 @@
+services:
+  forge:
+    build: .
+    restart: unless-stopped
+    ports:
+      # Reachable from any browser on your network at http://<dgx-ip>:3000
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://forge:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/forge
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      # Ollama runs on the DGX host, outside this container
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3-coder-next}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - workspaces:/data/workspaces
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # /api/healthz is intentionally unauthenticated for this check
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: forge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: forge
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forge -d forge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+  workspaces:

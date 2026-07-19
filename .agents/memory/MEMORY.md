@@ -1,0 +1,2 @@
+- [Forge agent decisions](forge-agent.md) — Ollama-only local LLM (default qwen3-coder-next), SSE event contract, workspace sandbox rules.
+- [Monorepo TS builds](ts-project-refs.md) — after editing lib/db schema, run `npx tsc -b lib/db` or dependents' typecheck sees stale dist .d.ts exports.
