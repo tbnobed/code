@@ -193,7 +193,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
       <div className="h-14 border-b border-border flex items-center justify-between px-6 bg-card shrink-0">
         <div className="flex items-center gap-4">
           <h2 className="font-mono font-bold text-sm tracking-wide flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(255,87,34,0.6)]"></span>
+            <span className="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(255,122,24,0.6)]"></span>
             {sessionData.title}
           </h2>
           <Badge variant="outline" className="font-mono text-[10px] rounded-sm bg-background border-border text-muted-foreground flex gap-1.5 items-center">
@@ -318,7 +318,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                     
                     {/* Active Tool Call */}
                     {activeToolCall && (
-                      <div className="flex flex-col bg-card border border-primary/50 rounded-sm overflow-hidden shadow-[0_0_15px_rgba(255,87,34,0.1)]">
+                      <div className="flex flex-col bg-card border border-primary/50 rounded-sm overflow-hidden shadow-[0_0_15px_rgba(255,122,24,0.1)]">
                         <div className="bg-primary/10 px-3 py-2 flex items-center gap-2 border-b border-primary/20">
                           <Loader2 className="w-4 h-4 text-primary animate-spin" />
                           <span className="font-mono text-xs font-bold text-primary tracking-wide">

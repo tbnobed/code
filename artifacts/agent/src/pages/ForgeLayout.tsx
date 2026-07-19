@@ -159,7 +159,7 @@ function SessionList() {
               className={cn(
                 "group flex items-center justify-between px-3 py-2 text-sm rounded-sm cursor-pointer border transition-colors",
                 isActive 
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-primary/50 shadow-[0_0_10px_rgba(255,87,34,0.1)]" 
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-primary/50 shadow-[0_0_10px_rgba(255,122,24,0.1)]" 
                   : "border-transparent text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
               )}
             >
@@ -256,9 +256,9 @@ export default function ForgeLayout() {
         </div>
         
         <div className="h-14 flex items-center px-4 border-b border-sidebar-border bg-sidebar relative z-10">
-          <div className="flex items-center gap-2 text-sidebar-primary">
-            <Terminal className="h-5 w-5" />
-            <h1 className="font-bold tracking-widest font-mono text-sm uppercase">FORGE // <span className="text-sidebar-foreground">OS</span></h1>
+          <div className="flex items-center gap-2.5">
+            <img src={`${import.meta.env.BASE_URL}mark.svg`} alt="" className="h-6 w-6" />
+            <h1 className="font-bold tracking-widest font-mono text-sm uppercase text-sidebar-foreground">FORGE<span className="text-sidebar-primary">OS</span></h1>
           </div>
         </div>
 

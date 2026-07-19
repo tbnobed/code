@@ -1,3 +1,6 @@
-<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+<defs><linearGradient id="ember" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF7A18"/><stop offset="1" stop-color="#E23E1C"/></linearGradient></defs>
+<rect x="0" y="0" width="512" height="512" rx="96" fill="#0E1116"/>
+<path d="M170 190 L246 246 L170 302" fill="none" stroke="url(#ember)" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="276" y1="310" x2="348" y2="310" stroke="url(#ember)" stroke-width="34" stroke-linecap="round"/>
 </svg>

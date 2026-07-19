@@ -27,7 +27,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-background text-primary">
         <div className="flex flex-col items-center gap-4 animate-pulse">
-          <div className="w-16 h-16 bg-sidebar-accent text-sidebar-primary rounded-sm flex items-center justify-center border border-sidebar-border shadow-[0_0_20px_rgba(255,87,34,0.15)]">
+          <div className="w-16 h-16 bg-sidebar-accent text-sidebar-primary rounded-sm flex items-center justify-center border border-sidebar-border shadow-[0_0_20px_rgba(255,122,24,0.15)]">
             <Terminal className="w-8 h-8" />
           </div>
           <div className="font-mono text-xs font-bold tracking-widest text-muted-foreground uppercase">INITIALIZING_CORE...</div>

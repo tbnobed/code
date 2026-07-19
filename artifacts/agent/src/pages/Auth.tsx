@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Terminal, Lock, Loader2, AlertCircle } from "lucide-react";
+import { Lock, Loader2, AlertCircle } from "lucide-react";
 import { useLogin, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -48,10 +48,12 @@ export default function Auth() {
 
       <div className="w-full max-w-sm p-6 relative z-10">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-sidebar-accent text-sidebar-primary rounded-sm flex items-center justify-center shadow-lg border border-sidebar-border mb-4">
-            <Terminal className="w-8 h-8" />
-          </div>
-          <h1 className="font-bold tracking-widest font-mono text-xl uppercase">FORGE // <span className="text-muted-foreground">OS</span></h1>
+          <img
+            src={`${import.meta.env.BASE_URL}mark.svg`}
+            alt="ForgeOS"
+            className="w-16 h-16 mb-4 drop-shadow-[0_0_18px_rgba(255,122,24,0.35)]"
+          />
+          <h1 className="font-bold tracking-widest font-mono text-xl uppercase">FORGE<span className="text-primary">OS</span></h1>
           <p className="text-[10px] font-mono text-muted-foreground mt-2 tracking-widest uppercase">Secured Access Console</p>
         </div>
 
