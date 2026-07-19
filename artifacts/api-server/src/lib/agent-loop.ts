@@ -11,9 +11,19 @@ Guidelines:
 - Work step by step: plan briefly, then execute with tools, then verify (e.g. run the code or list files).
 - File paths are always relative to the workspace root.
 - After finishing, summarize what you built and how to use it.
-- If a command fails, read the error and fix the problem before giving up.`;
+- If a command fails, read the error and fix the problem before giving up.
+- Never restate your plan or repeat text from earlier in the conversation. After a tool result, continue directly from where you left off with the next action.`;
 
 const MAX_ITERATIONS = 25;
+
+function isCompleteJson(s: string): boolean {
+  try {
+    JSON.parse(s);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 type SendFn = (event: Record<string, unknown>) => void;
 
@@ -72,7 +82,17 @@ export async function runAgentTurn(session: Session, userContent: string, send: 
         send({ type: "text", content: delta.content });
       }
       for (const tc of delta.tool_calls ?? []) {
-        const idx = tc.index ?? 0;
+        // Some Ollama parsers emit every tool call with index 0 (ollama#16212).
+        // Detect a new call by a fresh id (or a name arriving after complete
+        // args) and start a new accumulator entry instead of concatenating.
+        let idx = tc.index ?? 0;
+        const last = toolCallsAcc[toolCallsAcc.length - 1];
+        const isNewCall =
+          (tc.id && last && last.id && tc.id !== last.id) ||
+          (tc.function?.name && last && last.name && last.args && isCompleteJson(last.args));
+        if (isNewCall && idx < toolCallsAcc.length) {
+          idx = toolCallsAcc.length;
+        }
         if (!toolCallsAcc[idx]) toolCallsAcc[idx] = { id: "", name: "", args: "" };
         if (tc.id) toolCallsAcc[idx].id = tc.id;
         if (tc.function?.name) toolCallsAcc[idx].name += tc.function.name;
