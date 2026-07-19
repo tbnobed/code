@@ -11,6 +11,32 @@ export async function createWorkspace(sessionId: number | string) {
 }
 
 /**
+ * NOTES.md is the agent's long-term memory: the agent loop injects it into
+ * the system prompt on every model call, so it survives conversation
+ * trimming. Oversized notes keep the head (project overview) and tail
+ * (latest decisions) — the cap protects the prompt's reserved-token room.
+ */
+export async function readProjectNotes(workspaceDir: string): Promise<string> {
+  const HEAD = 2_000;
+  const TAIL = 4_000;
+  try {
+    // Same symlink containment as every other workspace read: NOTES.md is
+    // agent/user-writable and could be a symlink pointing outside the
+    // workspace — never inject foreign file content into the prompt.
+    const p = await resolveInWorkspace(workspaceDir, "NOTES.md");
+    const raw = (await fs.readFile(p, "utf8")).trim();
+    if (raw.length <= HEAD + TAIL) return raw;
+    return (
+      raw.slice(0, HEAD) +
+      "\n\n...[NOTES.md over 6000 chars — middle omitted from context; consider tightening it]...\n\n" +
+      raw.slice(-TAIL)
+    );
+  } catch {
+    return ""; // no NOTES.md yet — normal for a young project
+  }
+}
+
+/**
  * Resolve a relative path inside a workspace, rejecting escapes.
  * Checks both the lexical path and the realpath (symlink-resolved) of the
  * deepest existing ancestor, so symlinks cannot escape the workspace.
