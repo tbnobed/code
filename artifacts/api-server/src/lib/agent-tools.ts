@@ -110,11 +110,38 @@ export const toolDefinitions: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "consult_architect",
+      description:
+        "Consult a senior software architect (a larger reasoning model) for a design plan, a code review, or a diagnosis of a bug that resists fixing. Slow — reserve it for genuinely hard or high-stakes decisions, not routine steps. Pass the relevant file paths so the architect can read them.",
+      parameters: {
+        type: "object",
+        properties: {
+          question: {
+            type: "string",
+            description:
+              "The design question, review request, or bug description — include what was already tried",
+          },
+          paths: {
+            type: "array",
+            items: { type: "string" },
+            description: "Workspace-relative paths of files the architect should read (max 8)",
+          },
+        },
+        required: ["question"],
+      },
+    },
+  },
 ];
 
 const MAX_OUTPUT = 16_000;
 
 const VISION_MODEL = process.env.OLLAMA_VISION_MODEL ?? "qwen2.5vl";
+
+export const ARCHITECT_MODEL =
+  process.env.OLLAMA_ARCHITECT_MODEL ?? "qwen3-next:80b-a3b-thinking";
 
 const IMAGE_MIME: Record<string, string> = {
   ".png": "image/png",
@@ -441,6 +468,81 @@ export async function executeTool(
         const answer = data?.message?.content?.trim();
         if (!answer) return { result: "Vision model returned no content", isError: true };
         return { result: sanitize(`[${VISION_MODEL} looked at ${rel}]\n${answer}`), isError: false };
+      }
+      case "consult_architect": {
+        const question = String(args.question ?? "").trim();
+        if (!question) return { result: "question is required", isError: true };
+        const rawPaths = Array.isArray(args.paths) ? args.paths.slice(0, 8) : [];
+        const MAX_FILE = 24_000;
+        const MAX_TOTAL = 96_000;
+        let attached = "";
+        for (const rp of rawPaths) {
+          const rel = String(rp).trim();
+          if (!rel) continue;
+          try {
+            const p = await resolveInWorkspace(workspaceDir, rel);
+            // Cap before reading so a huge file never fully loads into memory.
+            const fh = await fs.open(p, "r");
+            try {
+              const st = await fh.stat();
+              const cap = Math.min(st.size, MAX_FILE);
+              const chunk = Buffer.alloc(cap);
+              await fh.read(chunk, 0, cap, 0);
+              const clipped =
+                chunk.toString("utf8") + (st.size > MAX_FILE ? "\n...[truncated]" : "");
+              attached += `\n\n--- ${rel} ---\n${clipped}`;
+            } finally {
+              await fh.close();
+            }
+          } catch {
+            attached += `\n\n--- ${rel} ---\n[could not read this file]`;
+          }
+          if (attached.length > MAX_TOTAL) {
+            attached = attached.slice(0, MAX_TOTAL) + "\n...[context truncated]";
+            break;
+          }
+        }
+        // Native /api/chat handles thinking models more reliably than the
+        // OpenAI-compat endpoint (same reason analyze_image uses it).
+        const resp = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: ARCHITECT_MODEL,
+            stream: false,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are a senior software architect advising a coding agent. Give a concrete, actionable answer: a step-by-step plan, a specific diagnosis, or a focused review. Reference the provided files by name. Be direct and keep it under ~600 words. You cannot run tools — reason from what is given.",
+              },
+              {
+                role: "user",
+                content: question + (attached ? `\n\nRelevant files:${attached}` : ""),
+              },
+            ],
+          }),
+          // Reasoning models think for a while before answering.
+          signal: withTimeout(signal, 600_000),
+        });
+        if (resp.status === 404) {
+          return {
+            result: `Architect model "${ARCHITECT_MODEL}" is not installed on the Ollama host. The user must run: ollama pull ${ARCHITECT_MODEL} (or set OLLAMA_ARCHITECT_MODEL to an installed model).`,
+            isError: true,
+          };
+        }
+        if (!resp.ok) {
+          const detail = await resp.text().then((t) => t.slice(0, 300)).catch(() => "");
+          return { result: `Architect request failed: HTTP ${resp.status} ${detail}`, isError: true };
+        }
+        const data = (await resp.json()) as { message?: { content?: string } };
+        // Thinking models put reasoning in message.thinking (ignored here) or
+        // inline <think> tags (stripped) — only the final answer goes back.
+        const answer = (data?.message?.content ?? "")
+          .replace(/<think>[\s\S]*?<\/think>/g, "")
+          .trim();
+        if (!answer) return { result: "Architect model returned no content", isError: true };
+        return { result: sanitize(`[architect ${ARCHITECT_MODEL}]\n${answer}`), isError: false };
       }
       default:
         return { result: `Unknown tool: ${name}`, isError: true };

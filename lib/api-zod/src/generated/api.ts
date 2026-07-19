@@ -220,7 +220,8 @@ export const SendChatParams = zod.object({
 })
 
 export const SendChatBody = zod.object({
-  "content": zod.string()
+  "content": zod.string(),
+  "architect": zod.boolean().optional().describe('Route this turn to the architect (reasoning) model — no tools, thinking streamed as SSE `thinking` events.')
 })
 
 export const SendChatResponse = zod.unknown()

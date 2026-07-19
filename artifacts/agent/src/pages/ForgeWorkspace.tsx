@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useGetSession, useListWorkspaceFiles, useReadWorkspaceFile } from "@workspace/api-client-react";
-import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download, Paperclip, Upload, X, Pencil, Save, Square, RotateCcw, GitCommitHorizontal, SquareTerminal } from "lucide-react";
+import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download, Paperclip, Upload, X, Pencil, Save, Square, RotateCcw, GitCommitHorizontal, SquareTerminal, Brain } from "lucide-react";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import CheckpointsPanel from "@/components/forge/CheckpointsPanel";
 import TerminalPanel from "@/components/forge/TerminalPanel";
@@ -129,7 +129,8 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
     setPreviewKey((k) => k + 1);
   }, [queryClient, sessionId]);
 
-  const { sendChat, isStreaming, streamingText, activeToolCall, error, stopStream } = useChatStream({
+  const [architectMode, setArchitectMode] = useState(false);
+  const { sendChat, isStreaming, streamingText, streamingThinking, activeToolCall, error, stopStream, isArchitectTurn } = useChatStream({
     sessionId,
     onDone: refreshWorkspaceState,
     onToolResult: (name) => {
@@ -228,7 +229,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
     const messageContent = [attachNote, trimmed].filter(Boolean).join("\n\n");
     setInput("");
     setAttachedFiles([]);
-    sendChat(messageContent);
+    sendChat(messageContent, { architect: architectMode });
   };
 
   // Retry / edit the last user message: the server deletes that message and
@@ -243,7 +244,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
   const handleRetry = async (messageId: number, content: string) => {
     if (isStreaming || isUploading) return;
     await deleteFromMessage(messageId);
-    sendChat(content);
+    sendChat(content, { architect: architectMode });
   };
   const handleEditLast = async (messageId: number, content: string) => {
     if (isStreaming || isUploading) return;
@@ -482,10 +483,21 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
               {isStreaming && (
                 <div className="flex flex-col gap-1 max-w-[95%] mr-auto animate-in fade-in slide-in-from-bottom-2 duration-300">
                   <div className="flex items-center gap-2 text-[10px] font-mono font-bold text-muted-foreground tracking-wider uppercase mb-1">
-                    <Cpu className="w-3 h-3 text-primary animate-pulse" /> AGENT_PROCESS
+                    {isArchitectTurn ? (
+                      <><Brain className="w-3 h-3 text-primary animate-pulse" /> ARCHITECT_PROCESS</>
+                    ) : (
+                      <><Cpu className="w-3 h-3 text-primary animate-pulse" /> AGENT_PROCESS</>
+                    )}
                   </div>
                   
                   <div className="space-y-3 w-full">
+                    {/* Architect reasoning trace (ephemeral — display only) */}
+                    {streamingThinking && (
+                      <div className="bg-background border border-border/60 rounded-sm px-4 py-3 text-xs font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                        <span className="block text-[9px] font-bold tracking-widest text-primary/70 mb-1.5">REASONING</span>
+                        {streamingThinking}
+                      </div>
+                    )}
                     {/* Streaming Text */}
                     {streamingText && (
                       <div className="bg-card border border-card-border text-card-foreground rounded-sm px-4 py-3 shadow-sm text-sm whitespace-pre-wrap">
@@ -510,10 +522,10 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                     )}
 
                     {/* Waiting state before anything streams */}
-                    {!streamingText && !activeToolCall && (
+                    {!streamingText && !streamingThinking && !activeToolCall && (
                       <div className="flex items-center gap-3 text-muted-foreground text-sm font-mono italic">
                         <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                        Generating response...
+                        {isArchitectTurn ? "Architect is thinking..." : "Generating response..."}
                       </div>
                     )}
                   </div>
@@ -580,7 +592,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
               <Input 
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                placeholder={attachedFiles.length ? "What should I do with these files?" : "Command sequence or natural language instruction..."}
+                placeholder={architectMode ? "Deep-dive question for the architect (no file edits)..." : attachedFiles.length ? "What should I do with these files?" : "Command sequence or natural language instruction..."}
                 className="w-full pl-10 pr-36 py-6 bg-background border-2 border-input focus-visible:border-primary focus-visible:ring-0 rounded-sm font-mono text-sm shadow-sm transition-all"
                 disabled={isStreaming}
                 autoFocus
@@ -598,6 +610,16 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                     <Square className="w-3 h-3 fill-current" /> STOP
                   </Button>
                 )}
+                <Button
+                  type="button"
+                  variant={architectMode ? "default" : "ghost"}
+                  size="icon"
+                  title={architectMode ? "Architect mode ON — this message goes to the reasoning model for a deep dive (no file edits)" : "Architect mode: discuss design and plans with the reasoning model"}
+                  onClick={() => setArchitectMode((v) => !v)}
+                  className={cn("h-8 w-8 rounded-sm", !architectMode && "text-muted-foreground hover:text-primary")}
+                >
+                  <Brain className="w-4 h-4" />
+                </Button>
                 <Button
                   type="button"
                   variant="ghost"

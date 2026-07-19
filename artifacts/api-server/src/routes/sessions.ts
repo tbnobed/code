@@ -8,7 +8,7 @@ import { makePreviewToken } from "./preview";
 import path from "node:path";
 import { createWorkspace, resolveInWorkspace, languageFromPath } from "../lib/workspace";
 import { DEFAULT_MODEL } from "../lib/ollama";
-import { runAgentTurn } from "../lib/agent-loop";
+import { runAgentTurn, runArchitectTurn } from "../lib/agent-loop";
 import { redactSecrets, workspaceEnv, makeStreamRedactor } from "../lib/agent-tools";
 import {
   ensureRepo,
@@ -130,7 +130,7 @@ router.get("/sessions/:id/messages", async (req, res) => {
 router.post("/sessions/:id/chat", async (req, res) => {
   const session = await getSessionOr404(req.params.id, res);
   if (!session) return;
-  const { content } = req.body ?? {};
+  const { content, architect } = req.body ?? {};
   if (!content || typeof content !== "string") {
     return res.status(400).json({ error: "content is required" });
   }
@@ -162,7 +162,12 @@ router.post("/sessions/:id/chat", async (req, res) => {
   }
 
   try {
-    await runAgentTurn(session, content, send, ac.signal);
+    if (architect === true) {
+      // Deep-dive turn: reasoning model, no tools, thinking streamed to UI.
+      await runArchitectTurn(session, content, send, ac.signal);
+    } else {
+      await runAgentTurn(session, content, send, ac.signal);
+    }
   } catch (err) {
     req.log.error({ err }, "agent turn failed");
     send({ type: "error", message: err instanceof Error ? err.message : "Agent failed" });

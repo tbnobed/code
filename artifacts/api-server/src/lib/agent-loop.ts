@@ -1,8 +1,8 @@
 import type OpenAI from "openai";
 import { eq, asc, sql } from "drizzle-orm";
 import { db, sessionsTable, messagesTable, type Session } from "@workspace/db";
-import { ollama } from "./ollama";
-import { toolDefinitions, executeTool } from "./agent-tools";
+import { ollama, OLLAMA_BASE_URL } from "./ollama";
+import { toolDefinitions, executeTool, ARCHITECT_MODEL } from "./agent-tools";
 import { githubEnabled } from "./git-setup";
 
 const SYSTEM_PROMPT = `You are Forge, an autonomous coding agent running locally. You help the user build software by creating files, editing them, and running commands inside a sandboxed workspace directory.
@@ -17,6 +17,7 @@ Guidelines:
 - The user can upload files into the workspace root; a note like [Uploaded to the workspace: data.csv] means those files exist — read or use them.
 - fetch_url reads a web page or API as plain text. Use it when the user shares a link or you need documentation or reference material.
 - analyze_image looks at an image file (screenshot, mockup, photo) with a vision model and reports what it shows. Use it BEFORE building UI from an uploaded mockup or screenshot.
+- consult_architect asks a senior architect (a larger reasoning model) for a plan, review, or hard-bug diagnosis. It is slow — reserve it for genuinely difficult decisions or when the user asks for a plan/review, and pass the relevant file paths.
 
 Web design standards — any website you build MUST look modern and professionally designed:
 - Always link the stylesheet with a relative path (href="styles.css", never href="/styles.css") and verify the file exists.
@@ -251,6 +252,146 @@ export async function runAgentTurn(
     }
   } finally {
     // Runs even when the turn is stopped or crashes, so counts stay right.
+    await db
+      .update(sessionsTable)
+      .set({
+        messageCount: sql`${sessionsTable.messageCount} + ${newMessageCount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(sessionsTable.id, session.id));
+  }
+}
+
+const ARCHITECT_SYSTEM_PROMPT = `You are Forge's architect — a senior software architect in a deep-dive conversation with the user about their project.
+
+- Think through problems rigorously: architecture, tradeoffs, edge cases, failure modes.
+- Give concrete recommendations with clear reasoning, not generic advice.
+- Reference actual files from the workspace listing when relevant.
+- You cannot edit files or run commands. When work should be done, end with a short handoff plan the user can give the coding agent.`;
+
+/**
+ * Architect mode: the whole turn goes to the reasoning model — no tools, but
+ * its thinking trace is streamed to the UI as `thinking` events. Uses Ollama's
+ * native /api/chat because the OpenAI-compat endpoint handles thinking models
+ * inconsistently (same reason analyze_image uses it).
+ */
+export async function runArchitectTurn(
+  session: Session,
+  userContent: string,
+  send: SendFn,
+  signal?: AbortSignal,
+) {
+  await db.insert(messagesTable).values({
+    sessionId: session.id,
+    role: "user",
+    content: userContent,
+  });
+  let newMessageCount = 1; // the user message
+
+  try {
+    const history = await db
+      .select()
+      .from(messagesTable)
+      .where(eq(messagesTable.sessionId, session.id))
+      .orderBy(asc(messagesTable.id));
+
+    // Flatten to plain user/assistant text: tool calls and tool results from
+    // coding turns are noise for a pure-reasoning model (and its chat
+    // template may not even support tool messages).
+    const MAX_MSG = 8_000;
+    const flat: { role: "user" | "assistant"; content: string }[] = [];
+    for (const m of history) {
+      if ((m.role !== "user" && m.role !== "assistant") || !m.content?.trim()) continue;
+      const c =
+        m.content.length > MAX_MSG ? m.content.slice(0, MAX_MSG) + "\n...[truncated]" : m.content;
+      flat.push({ role: m.role as "user" | "assistant", content: c });
+    }
+    const recent = flat.slice(-60);
+
+    let filesNote = "";
+    try {
+      const { result, isError } = await executeTool(session.workspacePath, "list_files", {}, signal);
+      if (!isError) {
+        filesNote = `\n\nWorkspace files:\n${result.split("\n").slice(0, 200).join("\n")}`;
+      }
+    } catch {
+      // listing is best-effort
+    }
+
+    const resp = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: ARCHITECT_MODEL,
+        stream: true,
+        messages: [{ role: "system", content: ARCHITECT_SYSTEM_PROMPT + filesNote }, ...recent],
+      }),
+      signal,
+    });
+    if (resp.status === 404) {
+      send({
+        type: "error",
+        message: `Architect model "${ARCHITECT_MODEL}" is not installed on the Ollama host. Run: ollama pull ${ARCHITECT_MODEL} (or set OLLAMA_ARCHITECT_MODEL to an installed model).`,
+      });
+      return;
+    }
+    if (!resp.ok || !resp.body) {
+      const detail = await resp.text().then((t) => t.slice(0, 300)).catch(() => "");
+      send({ type: "error", message: `Architect request failed: HTTP ${resp.status} ${detail}` });
+      return;
+    }
+
+    let text = "";
+    let aborted = false;
+    const handleLine = (line: string) => {
+      if (!line.trim()) return;
+      let evt: { message?: { thinking?: string; content?: string }; error?: string };
+      try {
+        evt = JSON.parse(line);
+      } catch {
+        return; // tolerate keepalive/garbage lines
+      }
+      if (evt.error) throw new Error(evt.error);
+      if (evt.message?.thinking) send({ type: "thinking", content: evt.message.thinking });
+      if (evt.message?.content) {
+        text += evt.message.content;
+        send({ type: "text", content: evt.message.content });
+      }
+    };
+    try {
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) handleLine(line);
+      }
+      // Flush at EOF: a final record without a trailing newline (or a split
+      // multibyte character held by the decoder) would otherwise be dropped.
+      buf += decoder.decode();
+      handleLine(buf);
+    } catch (err) {
+      if (signal?.aborted) aborted = true;
+      else throw err;
+    }
+
+    // Some models emit inline <think> tags instead of the thinking field —
+    // keep the transcript clean either way.
+    const clean = text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    if (clean || aborted) {
+      await db.insert(messagesTable).values({
+        sessionId: session.id,
+        role: "assistant",
+        content: aborted ? `${clean}\n\n[Stopped by user]`.trim() : clean,
+      });
+      newMessageCount++;
+    }
+  } finally {
+    // Keep counts right even when the turn was stopped or crashed.
     await db
       .update(sessionsTable)
       .set({

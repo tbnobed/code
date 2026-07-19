@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 
 type StreamEvent =
   | { type: "text"; content: string }
+  | { type: "thinking"; content: string }
   | { type: "tool_call"; name: string; arguments: string }
   | { type: "tool_result"; name: string; result: string; isError?: boolean }
   | { type: "checkpoint"; hash: string }
@@ -23,7 +24,11 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
 
   // Ephemeral streaming state for UI display before it's saved in DB
   const [streamingText, setStreamingText] = useState("");
+  // Architect-mode reasoning trace (never persisted — display only).
+  const [streamingThinking, setStreamingThinking] = useState("");
   const [activeToolCall, setActiveToolCall] = useState<{name: string, arguments: string} | null>(null);
+  // Whether the current/last stream was an architect (reasoning) turn.
+  const [isArchitectTurn, setIsArchitectTurn] = useState(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -49,11 +54,12 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
     }
     setIsStreaming(false);
     setStreamingText("");
+    setStreamingThinking("");
     setActiveToolCall(null);
     if (hadStream && !opts?.silent) onStoppedRef.current?.();
   }, []);
 
-  const sendChat = useCallback(async (content: string) => {
+  const sendChat = useCallback(async (content: string, opts?: { architect?: boolean }) => {
     if (abortControllerRef.current) return; // a turn is already in flight
 
     const ac = new AbortController();
@@ -61,7 +67,9 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
     setIsStreaming(true);
     setError(null);
     setStreamingText("");
+    setStreamingThinking("");
     setActiveToolCall(null);
+    setIsArchitectTurn(!!opts?.architect);
 
     try {
       const response = await fetch(`${import.meta.env.BASE_URL}api/sessions/${sessionId}/chat`, {
@@ -69,7 +77,7 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, architect: !!opts?.architect }),
         signal: ac.signal,
       });
 
@@ -107,6 +115,9 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
                 case "text":
                   setStreamingText(prev => prev + event.content);
                   break;
+                case "thinking":
+                  setStreamingThinking(prev => prev + event.content);
+                  break;
                 case "tool_call":
                   setActiveToolCall({ name: event.name, arguments: event.arguments });
                   break;
@@ -142,6 +153,7 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
         abortControllerRef.current = null;
         setIsStreaming(false);
         setStreamingText("");
+        setStreamingThinking("");
         setActiveToolCall(null);
       }
     }
@@ -158,8 +170,10 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
     sendChat,
     isStreaming,
     streamingText,
+    streamingThinking,
     activeToolCall,
     error,
-    stopStream
+    stopStream,
+    isArchitectTurn
   };
 }

@@ -481,6 +481,9 @@ components:
       properties:
         content:
           type: string
+        architect:
+          type: boolean
+          description: Route this turn to the architect (reasoning) model — no tools, thinking streamed as SSE `thinking` events.
       required:
         - content
 

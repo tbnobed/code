@@ -8,4 +8,6 @@
 
 export interface ChatInput {
   content: string;
+  /** Route this turn to the architect (reasoning) model — no tools, thinking streamed as SSE `thinking` events. */
+  architect?: boolean;
 }

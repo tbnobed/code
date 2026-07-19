@@ -5,7 +5,7 @@ description: Durable decisions for the Forge local coding-agent app (Ollama, SSE
 
 - No cloud LLM APIs — user explicitly requires local models via Ollama on their DGX Spark (128GB unified memory). Backend uses the `openai` npm package pointed at `${OLLAMA_BASE_URL}/v1` (default `http://localhost:11434`).
 - Default model: `qwen3-coder-next` (July 2026 community consensus for DGX Spark agentic coding). Overridable via `OLLAMA_MODEL` env var and per-session model field. User rejected 2025-era models (Qwen2.5-Coder, Devstral) as outdated — always research current models, mind the actual date.
-- SSE chat contract: `data:` lines with JSON `{type: "text"|"tool_call"|"tool_result"|"done"|"error", ...}`; `tool_call.arguments` is a JSON **string** (frontend typing expects string).
+- SSE chat contract: `data:` lines with JSON `{type: "text"|"thinking"|"tool_call"|"tool_result"|"checkpoint"|"done"|"error", ...}`; `tool_call.arguments` is a JSON **string** (frontend typing expects string). `thinking` is architect-mode reasoning — display-only, never persisted. Chat body flag `architect: true` routes the turn to the reasoning model (no tools).
 - Error payloads must be `{ error: string }` per OpenAPI `ApiError` — not `{ message }`.
 - Workspace paths: per-session dirs under `/tmp/agent-workspaces/<id>` (env `AGENT_WORKSPACES_DIR`). `resolveInWorkspace` is async and does realpath-based symlink containment — keep it that way; lexical prefix checks alone are bypassable via symlinks.
 
@@ -35,6 +35,15 @@ Brand kit applied: name "ForgeOS", ember orange primary #FF7A18 (hsl 25 100% 55%
 - Secret hygiene for user-facing shells (terminal + run_command): spawn with `workspaceEnv()` (strips SESSION_SECRET/ADMIN_PASSWORD/DATABASE_URL/PG*/REPL* — GITHUB_TOKEN intentionally kept for the git credential helper), and stream output through `makeStreamRedactor()` (line-boundary holdback) because chunk-by-chunk redaction leaks secrets split across chunk boundaries. **How to apply:** never pass raw `process.env` to a user-triggered process; never redact SSE output chunk-by-chunk.
 - React SSE-hook rule: callbacks passed into the stream hook go into refs, `stopStream`/`sendChat` must be referentially stable, and a request's `finally` may only clear shared state if it is still the active request (identity check on its AbortController). **Why:** inline callbacks otherwise re-trigger the unmount-cleanup effect every render and abort live streams; a stopped request's late finally clobbered the next stream's state.
 - Vision goes through Ollama's native `/api/chat` with a base64 `images` array (the OpenAI-compat vision path is flaky); model from `OLLAMA_VISION_MODEL`, default `qwen2.5vl`; a 404 from Ollama means the model isn't pulled — surface the `ollama pull` hint.
+
+## Architect model (July 2026)
+- Second model role: `OLLAMA_ARCHITECT_MODEL`, default `qwen3-next:80b-a3b-thinking` (50GB Q4 — co-resident with the 52GB coder in 128GB unified memory, so no swap latency; gpt-oss:120b is the max-quality alternative but forces model swapping). **Why:** researched July 2026 — frontier open reasoners (GLM-5.2 744B, DeepSeek V4, Kimi K3) don't fit 128GB; R1-era distills lack reliable tool calling and are stale.
+- Two surfaces: `consult_architect` tool (coder passes question + file paths; 600s timeout; answer only, thinking dropped) and `architect: true` chat turns (no tools, history flattened to user/assistant text because reasoning-model chat templates may not accept tool messages; thinking streamed as `thinking` SSE events, never persisted; `<think>` tags stripped before persisting).
+- Both use Ollama's native /api/chat (same rationale as vision: OpenAI-compat handling of thinking models is inconsistent).
+
+## Dev-env quirks (Replit workspace)
+- No `python3` in the shell — use `node` for scripted multi-edit jobs. A failed heredoc command does NOT stop subsequent newline-separated commands, so a later typecheck can "pass" against unedited files; make edit scripts assert and check their output line.
+- `pkill -f` matches the ShellExec shell's own command line and self-kills — use `pkill -x`.
 
 ## File uploads & workspace fragility
 Uploads are raw-body PUTs (no multer — keeps esbuild static-import rule); name in URL, basename-flattened, control-chars/length rejected server-side; client caps at 3 concurrent PUTs because the server buffers bodies in memory.
