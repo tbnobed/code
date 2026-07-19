@@ -65,10 +65,10 @@ export async function seedAdminUser(): Promise<void> {
   if (existing) {
     await db
       .update(usersTable)
-      .set({ passwordHash })
+      .set({ passwordHash, isAdmin: true })
       .where(eq(usersTable.id, existing.id));
   } else {
-    await db.insert(usersTable).values({ username, passwordHash });
+    await db.insert(usersTable).values({ username, passwordHash, isAdmin: true });
   }
 }
 
@@ -90,6 +90,24 @@ export const sessionMiddleware = session({
 export const requireAuth: RequestHandler = (req, res, next) => {
   if (!req.session.userId) {
     res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  next();
+};
+
+export const requireAdmin: RequestHandler = async (req, res, next) => {
+  if (!req.session.userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const { db, usersTable } = await import("@workspace/db");
+  const { eq } = await import("drizzle-orm");
+  const [user] = await db
+    .select({ isAdmin: usersTable.isAdmin })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.session.userId));
+  if (!user?.isAdmin) {
+    res.status(403).json({ error: "Admin access required" });
     return;
   }
   next();

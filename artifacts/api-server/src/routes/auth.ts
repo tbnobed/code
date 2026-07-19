@@ -7,7 +7,12 @@ import { requireAuth } from "../lib/auth";
 const router: IRouter = Router();
 
 function serializeUser(u: typeof usersTable.$inferSelect) {
-  return { id: u.id, username: u.username, createdAt: u.createdAt.toISOString() };
+  return {
+    id: u.id,
+    username: u.username,
+    isAdmin: u.isAdmin,
+    createdAt: u.createdAt.toISOString(),
+  };
 }
 
 function validCredentials(body: unknown): { username: string; password: string } | null {

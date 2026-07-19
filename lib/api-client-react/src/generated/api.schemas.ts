@@ -91,7 +91,16 @@ export interface CredentialsBody {
 export interface User {
   id: number;
   username: string;
+  isAdmin: boolean;
   createdAt: string;
+}
+
+export interface PasswordBody {
+  /**
+     * @minLength 8
+     * @maxLength 256
+     */
+  password: string;
 }
 
 export interface ApiError {

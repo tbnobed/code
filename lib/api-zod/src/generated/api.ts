@@ -35,6 +35,7 @@ export const LoginBody = zod.object({
 export const LoginResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
+  "isAdmin": zod.boolean(),
   "createdAt": zod.coerce.date()
 })
 
@@ -51,8 +52,74 @@ export const LogoutResponse = zod.void()
 export const GetCurrentUserResponse = zod.object({
   "id": zod.number(),
   "username": zod.string(),
+  "isAdmin": zod.boolean(),
   "createdAt": zod.coerce.date()
 })
+
+
+/**
+ * @summary List all users (admin only)
+ */
+export const ListUsersResponseItem = zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "isAdmin": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+export const ListUsersResponse = zod.array(ListUsersResponseItem)
+
+
+/**
+ * @summary Create a user (admin only)
+ */
+export const createUserBodyUsernameMin = 3;
+export const createUserBodyUsernameMax = 64;
+
+export const createUserBodyPasswordMin = 8;
+export const createUserBodyPasswordMax = 256;
+
+
+
+export const CreateUserBody = zod.object({
+  "username": zod.string().min(createUserBodyUsernameMin).max(createUserBodyUsernameMax),
+  "password": zod.string().min(createUserBodyPasswordMin).max(createUserBodyPasswordMax)
+})
+
+export const CreateUserResponse = zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "isAdmin": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a user (admin only)
+ */
+export const DeleteUserParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteUserResponse = zod.void()
+
+
+/**
+ * @summary Reset a user's password (admin only)
+ */
+export const ResetUserPasswordParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const resetUserPasswordBodyPasswordMin = 8;
+export const resetUserPasswordBodyPasswordMax = 256;
+
+
+
+export const ResetUserPasswordBody = zod.object({
+  "password": zod.string().min(resetUserPasswordBodyPasswordMin).max(resetUserPasswordBodyPasswordMax)
+})
+
+export const ResetUserPasswordResponse = zod.void()
 
 
 /**

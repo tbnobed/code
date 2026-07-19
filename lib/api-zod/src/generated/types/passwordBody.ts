@@ -6,9 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface User {
-  id: number;
-  username: string;
-  isAdmin: boolean;
-  createdAt: Date;
+export interface PasswordBody {
+  /**
+     * @minLength 8
+     * @maxLength 256
+     */
+  password: string;
 }

@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS "users" (
   "id" serial PRIMARY KEY,
   "username" text NOT NULL UNIQUE,
   "password_hash" text NOT NULL,
+  "is_admin" boolean NOT NULL DEFAULT false,
   "created_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 

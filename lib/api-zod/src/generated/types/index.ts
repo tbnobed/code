@@ -13,6 +13,7 @@ export * from './filePathInput';
 export * from './healthStatus';
 export * from './message';
 export * from './ollamaModel';
+export * from './passwordBody';
 export * from './session';
 export * from './sessionInput';
 export * from './sessionWithMessages';

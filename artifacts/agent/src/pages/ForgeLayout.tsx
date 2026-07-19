@@ -190,6 +190,7 @@ function SessionList() {
 
 import { cn } from "@/lib/utils";
 import ForgeWorkspace from "./ForgeWorkspace";
+import UsersDialog from "@/components/UsersDialog";
 
 function UserBlock() {
   const { data: user } = useGetCurrentUser();
@@ -219,10 +220,11 @@ function UserBlock() {
             {user.username}
           </span>
           <span className="font-mono text-[9px] text-muted-foreground uppercase tracking-widest">
-            SYS_ADMIN
+            {user.isAdmin ? "SYS_ADMIN" : "OPERATOR"}
           </span>
         </div>
       </div>
+      {user.isAdmin && <UsersDialog />}
       <Button 
         variant="ghost" 
         size="icon" 
