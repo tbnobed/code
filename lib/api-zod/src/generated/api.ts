@@ -17,29 +17,6 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * @summary Create a local account and start a session
- */
-export const registerBodyUsernameMin = 3;
-export const registerBodyUsernameMax = 64;
-
-export const registerBodyPasswordMin = 8;
-export const registerBodyPasswordMax = 256;
-
-
-
-export const RegisterBody = zod.object({
-  "username": zod.string().min(registerBodyUsernameMin).max(registerBodyUsernameMax),
-  "password": zod.string().min(registerBodyPasswordMin).max(registerBodyPasswordMax)
-})
-
-export const RegisterResponse = zod.object({
-  "id": zod.number(),
-  "username": zod.string(),
-  "createdAt": zod.coerce.date()
-})
-
-
-/**
  * @summary Log in with username and password
  */
 export const loginBodyUsernameMin = 3;

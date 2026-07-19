@@ -28,6 +28,50 @@ export const ensureSessionTable = pool.query(`
   CREATE INDEX IF NOT EXISTS "IDX_user_sessions_expire" ON "user_sessions" ("expire");
 `);
 
+/**
+ * Seed (or rotate) the admin account. Self-registration is disabled, so this
+ * is the only way accounts are created.
+ * - ADMIN_PASSWORD set: upsert the admin user with that password (rotating
+ *   the password in .env + restart updates it).
+ * - ADMIN_PASSWORD unset: fine if users already exist; otherwise fail fast,
+ *   since nobody would be able to log in.
+ */
+export async function seedAdminUser(): Promise<void> {
+  const bcrypt = (await import("bcryptjs")).default;
+  const { db, usersTable } = await import("@workspace/db");
+  const { eq } = await import("drizzle-orm");
+
+  const username = process.env.ADMIN_USERNAME ?? "admin";
+  const password = process.env.ADMIN_PASSWORD;
+
+  if (!password) {
+    const [anyUser] = await db.select({ id: usersTable.id }).from(usersTable).limit(1);
+    if (!anyUser) {
+      throw new Error(
+        "No users exist and ADMIN_PASSWORD is not set — set ADMIN_PASSWORD so the admin account can be seeded.",
+      );
+    }
+    return;
+  }
+  if (password.length < 8) {
+    throw new Error("ADMIN_PASSWORD must be at least 8 characters");
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  const [existing] = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.username, username));
+  if (existing) {
+    await db
+      .update(usersTable)
+      .set({ passwordHash })
+      .where(eq(usersTable.id, existing.id));
+  } else {
+    await db.insert(usersTable).values({ username, passwordHash });
+  }
+}
+
 export const sessionMiddleware = session({
   store: new PgStore({ pool, tableName: "user_sessions", createTableIfMissing: false }),
   secret: process.env.SESSION_SECRET,

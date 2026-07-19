@@ -32,31 +32,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
-  /auth/register:
-    post:
-      operationId: register
-      tags: [auth]
-      summary: Create a local account and start a session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CredentialsBody"
-      responses:
-        "201":
-          description: Account created and logged in
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/User"
-        "409":
-          description: Username already taken
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiError"
-
   /auth/login:
     post:
       operationId: login

@@ -21,29 +21,8 @@ function validCredentials(body: unknown): { username: string; password: string }
   return { username: username.trim(), password };
 }
 
-router.post("/auth/register", async (req, res) => {
-  const creds = validCredentials(req.body);
-  if (!creds) {
-    return res.status(400).json({
-      error: "Username must be 3-64 characters and password at least 8 characters",
-    });
-  }
-  const [existing] = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(eq(usersTable.username, creds.username));
-  if (existing) {
-    return res.status(409).json({ error: "Username already taken" });
-  }
-  const passwordHash = await bcrypt.hash(creds.password, 12);
-  const [user] = await db
-    .insert(usersTable)
-    .values({ username: creds.username, passwordHash })
-    .returning();
-  req.session.userId = user.id;
-  req.session.username = user.username;
-  return res.status(201).json(serializeUser(user));
-});
+// Self-registration is intentionally disabled: the only account is the admin
+// account seeded at startup from ADMIN_USERNAME/ADMIN_PASSWORD.
 
 router.post("/auth/login", async (req, res) => {
   const creds = validCredentials(req.body);

@@ -1,23 +1,20 @@
 import { useState } from "react";
 import { Terminal, Lock, Loader2, AlertCircle } from "lucide-react";
-import { useLogin, useRegister, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
+import { useLogin, getGetCurrentUserQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function Auth() {
-  const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
   const loginMutation = useLogin();
-  const registerMutation = useRegister();
 
-  const isPending = loginMutation.isPending || registerMutation.isPending;
+  const isPending = loginMutation.isPending;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,24 +26,17 @@ export default function Auth() {
       return;
     }
 
-    if (!isLogin && password !== confirmPassword) {
-      setError("Passphrases do not match");
-      return;
-    }
-
-    const payload = { data: { username: u, password } };
-    const onSuccess = () => {
-      queryClient.invalidateQueries({ queryKey: getGetCurrentUserQueryKey() });
-    };
-    const onError = (err: any) => {
-      setError(err.message || "Authentication failed");
-    };
-
-    if (isLogin) {
-      loginMutation.mutate(payload, { onSuccess, onError });
-    } else {
-      registerMutation.mutate(payload, { onSuccess, onError });
-    }
+    loginMutation.mutate(
+      { data: { username: u, password } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetCurrentUserQueryKey() });
+        },
+        onError: (err: any) => {
+          setError(err.message || "Authentication failed");
+        },
+      },
+    );
   };
 
   return (
@@ -66,21 +56,8 @@ export default function Auth() {
         </div>
 
         <div className="bg-card border border-border shadow-2xl rounded-sm overflow-hidden">
-          <div className="flex border-b border-border bg-muted/50">
-            <button
-              type="button"
-              className={`flex-1 py-3 text-[10px] font-mono font-bold tracking-widest uppercase transition-colors ${isLogin ? "text-primary border-b-2 border-primary bg-background shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted/80"}`}
-              onClick={() => { setIsLogin(true); setError(null); }}
-            >
-              Authenticate
-            </button>
-            <button
-              type="button"
-              className={`flex-1 py-3 text-[10px] font-mono font-bold tracking-widest uppercase transition-colors ${!isLogin ? "text-primary border-b-2 border-primary bg-background shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted/80"}`}
-              onClick={() => { setIsLogin(false); setError(null); }}
-            >
-              Provision
-            </button>
+          <div className="border-b border-border bg-muted/50 py-3 text-center text-[10px] font-mono font-bold tracking-widest uppercase text-primary">
+            Authenticate
           </div>
 
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -98,9 +75,9 @@ export default function Auth() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="font-mono text-sm bg-background border-input focus-visible:ring-primary rounded-sm h-10 transition-colors"
-                placeholder={isLogin ? "system_admin" : "username (3-64 chars)"}
+                placeholder="admin"
                 disabled={isPending}
-                autoComplete="off"
+                autoComplete="username"
                 autoCapitalize="off"
                 spellCheck="false"
                 required
@@ -114,26 +91,12 @@ export default function Auth() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="font-mono text-sm bg-background border-input focus-visible:ring-primary rounded-sm h-10 transition-colors"
-                placeholder={isLogin ? "••••••••" : "minimum 8 characters"}
+                placeholder="••••••••"
                 disabled={isPending}
+                autoComplete="current-password"
                 required
               />
             </div>
-
-            {!isLogin && (
-              <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                <Label className="font-mono text-[10px] text-muted-foreground tracking-widest uppercase">VERIFY PASSPHRASE</Label>
-                <Input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="font-mono text-sm bg-background border-input focus-visible:ring-primary rounded-sm h-10 transition-colors"
-                  placeholder="••••••••"
-                  disabled={isPending}
-                  required
-                />
-              </div>
-            )}
 
             <div className="pt-2">
               <Button
@@ -144,13 +107,17 @@ export default function Auth() {
                 {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : (
                   <span className="flex items-center gap-2">
                     <Lock className="w-3.5 h-3.5" />
-                    {isLogin ? "INITIATE SESSION" : "PROVISION ACCOUNT"}
+                    INITIATE SESSION
                   </span>
                 )}
               </Button>
             </div>
           </form>
         </div>
+
+        <p className="text-center text-[10px] font-mono text-muted-foreground mt-6 tracking-widest uppercase">
+          Access provisioned by system operator
+        </p>
       </div>
     </div>
   );

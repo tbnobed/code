@@ -1,9 +1,11 @@
 import app from "./app";
-import { ensureSessionTable } from "./lib/auth";
+import { ensureSessionTable, seedAdminUser } from "./lib/auth";
 import { logger } from "./lib/logger";
 
-// Make sure the session store table exists before accepting traffic.
+// Make sure the session store table and the admin account exist before
+// accepting traffic.
 await ensureSessionTable;
+await seedAdminUser();
 
 const rawPort = process.env["PORT"];
 

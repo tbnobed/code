@@ -12,6 +12,7 @@ description: Durable decisions for the Forge local coding-agent app (Ollama, SSE
 **Why:** captured after a code-review round found route/error-schema drift and a symlink escape; these contracts are easy to re-break when adding endpoints.
 
 Auth/deployment decisions (July 2026):
+- Self-registration is disabled by explicit user request — the only account is the admin seeded at startup from ADMIN_USERNAME/ADMIN_PASSWORD env (upsert, so rotating the env password + restart rotates the login). Never re-add a register endpoint/UI.
 - Local username/password auth only (bcrypt + express-session, pg store) — cloud auth providers contradict the self-hosted requirement. App is accessed from browsers on other LAN machines: cookies use `sameSite: lax`, `secure: "auto"` with `trust proxy`; prod Docker serves frontend + API same-origin so cookies just work.
 - connect-pg-simple's `createTableIfMissing` breaks under esbuild bundling (reads table.sql from its package dir) — the app creates `user_sessions` itself at startup instead.
 - `/api/healthz` is intentionally unauthenticated (Docker healthcheck uses it); everything else under /api except /auth/* requires login via router-level middleware.

@@ -8,6 +8,8 @@ services:
     environment:
       DATABASE_URL: postgres://forge:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/forge
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       # Ollama runs on the DGX host, outside this container
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3-coder-next}
