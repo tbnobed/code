@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useGetSession, useListWorkspaceFiles, useReadWorkspaceFile } from "@workspace/api-client-react";
-import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, MessageSquare, Download } from "lucide-react";
+import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download } from "lucide-react";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -29,12 +29,31 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
     query: { enabled: !!sessionId, queryKey: getListWorkspaceFilesQueryKey(sessionId) }
   });
 
+  // Throttled live-refresh of the preview + file list while the agent works.
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleWorkspaceRefresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: getListWorkspaceFilesQueryKey(sessionId) });
+    if (refreshTimerRef.current) return; // one pending bump at a time
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null;
+      setPreviewKey((k) => k + 1);
+    }, 1000);
+  }, [queryClient, sessionId]);
+  useEffect(() => () => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+  }, []);
+
+  const WRITE_TOOLS = ["create_file", "edit_file", "run_command"];
   const { sendChat, isStreaming, streamingText, activeToolCall, error } = useChatStream({
     sessionId,
     onDone: () => {
       queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(sessionId) });
       queryClient.invalidateQueries({ queryKey: getListWorkspaceFilesQueryKey(sessionId) });
-    }
+      setPreviewKey((k) => k + 1);
+    },
+    onToolResult: (name) => {
+      if (WRITE_TOOLS.includes(name)) scheduleWorkspaceRefresh();
+    },
   });
 
   const [showPreview, setShowPreview] = useState(false);
@@ -45,12 +64,13 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
   // its requests — access is granted via a signed token in the URL instead.
   useEffect(() => {
     if (!showPreview) return;
-    setPreviewToken(null);
     fetch(`${import.meta.env.BASE_URL}api/sessions/${sessionId}/preview-token`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d) => setPreviewToken(d.token))
       .catch(() => setPreviewToken(null));
-  }, [showPreview, sessionId]);
+    // previewKey in deps: every reload (manual or live-refresh) gets a fresh
+    // short-lived token, so an open preview never outlives its token.
+  }, [showPreview, sessionId, previewKey]);
 
   const previewUrl = previewToken
     ? `${import.meta.env.BASE_URL}api/sessions/${sessionId}/preview/${previewToken}/`
@@ -188,8 +208,8 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
             onClick={() => setShowPreview((v) => !v)}
             className="h-7 font-mono tracking-widest text-[10px] rounded-sm px-3 gap-1.5"
           >
-            {showPreview ? <MessageSquare className="w-3.5 h-3.5" /> : <Globe className="w-3.5 h-3.5" />}
-            {showPreview ? "CONSOLE" : "PREVIEW"}
+            <Globe className="w-3.5 h-3.5" />
+            {showPreview ? "HIDE PREVIEW" : "PREVIEW"}
           </Button>
           <span className="flex items-center gap-1.5"><HardDrive className="w-3.5 h-3.5" /> WORKSPACE MOUNTED</span>
           <span>//</span>
@@ -198,9 +218,9 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Live Site Preview */}
+        {/* Live Site Preview (side by side with chat) */}
         {showPreview && (
-          <div className="flex-1 flex flex-col border-r border-border bg-background min-w-[400px]">
+          <div className="flex-1 flex flex-col border-r border-border bg-background min-w-[320px]">
             <div className="h-9 border-b border-border bg-muted/50 flex items-center justify-between px-3 shrink-0">
               <span className="font-mono text-[10px] font-bold tracking-widest text-muted-foreground flex items-center gap-2">
                 <Globe className="w-3.5 h-3.5 text-primary" /> LIVE_PREVIEW
@@ -209,16 +229,16 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                 <Button variant="ghost" size="icon" className="w-6 h-6" title="Reload preview" onClick={() => setPreviewKey((k) => k + 1)}>
                   <RefreshCw className="w-3.5 h-3.5" />
                 </Button>
-                <Button variant="ghost" size="icon" className="w-6 h-6" title="Open in new tab" disabled={!previewUrl} onClick={() => previewUrl && window.open(previewUrl, "_blank")}>
+                <Button variant="ghost" size="icon" className="w-6 h-6" title="Open in new tab" disabled={!previewUrl} onClick={() => previewUrl && window.open(previewUrl, "_blank", "noopener,noreferrer")}>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </Button>
               </div>
             </div>
             {previewUrl ? (
               <iframe
-                key={previewKey}
                 src={previewUrl}
                 title="Workspace preview"
+                referrerPolicy="no-referrer"
                 sandbox="allow-scripts allow-forms"
                 className="flex-1 w-full bg-white"
               />
@@ -231,7 +251,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
         )}
 
         {/* Main Chat Area */}
-        <div className={cn("flex-1 flex-col border-r border-border bg-background min-w-[400px]", showPreview ? "hidden" : "flex")}>
+        <div className={cn("flex-1 flex flex-col border-r border-border bg-background", showPreview ? "min-w-[320px]" : "min-w-[400px]")}>
           <ScrollArea ref={chatScrollRef} className="flex-1 p-6">
             <div className="space-y-6 max-w-3xl mx-auto pb-12">
               

@@ -11,9 +11,11 @@ type StreamEvent =
 interface UseChatStreamOptions {
   sessionId: number;
   onDone?: () => void;
+  /** Fired after each tool finishes executing (name = tool name). */
+  onToolResult?: (name: string, isError?: boolean) => void;
 }
 
-export function useChatStream({ sessionId, onDone }: UseChatStreamOptions) {
+export function useChatStream({ sessionId, onDone, onToolResult }: UseChatStreamOptions) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -94,6 +96,7 @@ export function useChatStream({ sessionId, onDone }: UseChatStreamOptions) {
                   break;
                 case "tool_result":
                   setActiveToolCall(null);
+                  if (onToolResult) onToolResult(event.name, event.isError);
                   break;
                 case "error":
                   setError(event.message);
@@ -122,7 +125,7 @@ export function useChatStream({ sessionId, onDone }: UseChatStreamOptions) {
       setActiveToolCall(null);
       abortControllerRef.current = null;
     }
-  }, [sessionId, isStreaming, stopStream, onDone]);
+  }, [sessionId, isStreaming, stopStream, onDone, onToolResult]);
 
   // Cleanup on unmount
   useEffect(() => {

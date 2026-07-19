@@ -11,7 +11,7 @@ import { resolveInWorkspace } from "../lib/workspace";
 // Instead, access is authorized by a signed, expiring token embedded in the
 // URL path — issued only to logged-in users via /sessions/:id/preview-token.
 const SECRET = process.env.SESSION_SECRET!;
-const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const TOKEN_TTL_MS = 60 * 60 * 1000; // 1h — frontend fetches a fresh token per open/reload
 
 function sign(sessionId: number, exp: number): string {
   return crypto.createHmac("sha256", SECRET).update(`preview:${sessionId}:${exp}`).digest("base64url");
@@ -83,6 +83,10 @@ router.get(/^\/sessions\/(\d+)\/preview\/([A-Za-z0-9_~-]+)(\/.*)?$/, async (req,
   if (!session) return res.status(404).json({ error: "Session not found" });
 
   const base = `${req.baseUrl}/sessions/${sessionId}/preview/${token}/`;
+
+  // The token is a bearer credential in the URL: never let it propagate
+  // to other sites via the Referer header.
+  res.setHeader("Referrer-Policy", "no-referrer");
 
   // Redirect bare .../preview/<token> to .../<token>/ so relative URLs resolve
   if (req.params[2] === undefined) {
