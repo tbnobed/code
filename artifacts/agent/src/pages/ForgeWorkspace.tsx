@@ -39,7 +39,22 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
 
   const [showPreview, setShowPreview] = useState(false);
   const [previewKey, setPreviewKey] = useState(0);
-  const previewUrl = `${import.meta.env.BASE_URL}api/sessions/${sessionId}/preview/`;
+  const [previewToken, setPreviewToken] = useState<string | null>(null);
+
+  // The preview iframe is sandboxed, so browsers drop the session cookie for
+  // its requests — access is granted via a signed token in the URL instead.
+  useEffect(() => {
+    if (!showPreview) return;
+    setPreviewToken(null);
+    fetch(`${import.meta.env.BASE_URL}api/sessions/${sessionId}/preview-token`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d) => setPreviewToken(d.token))
+      .catch(() => setPreviewToken(null));
+  }, [showPreview, sessionId]);
+
+  const previewUrl = previewToken
+    ? `${import.meta.env.BASE_URL}api/sessions/${sessionId}/preview/${previewToken}/`
+    : null;
 
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const readFile = useReadWorkspaceFile();
@@ -194,18 +209,24 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                 <Button variant="ghost" size="icon" className="w-6 h-6" title="Reload preview" onClick={() => setPreviewKey((k) => k + 1)}>
                   <RefreshCw className="w-3.5 h-3.5" />
                 </Button>
-                <Button variant="ghost" size="icon" className="w-6 h-6" title="Open in new tab" onClick={() => window.open(previewUrl, "_blank")}>
+                <Button variant="ghost" size="icon" className="w-6 h-6" title="Open in new tab" disabled={!previewUrl} onClick={() => previewUrl && window.open(previewUrl, "_blank")}>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </Button>
               </div>
             </div>
-            <iframe
-              key={previewKey}
-              src={previewUrl}
-              title="Workspace preview"
-              sandbox="allow-scripts allow-forms"
-              className="flex-1 w-full bg-white"
-            />
+            {previewUrl ? (
+              <iframe
+                key={previewKey}
+                src={previewUrl}
+                title="Workspace preview"
+                sandbox="allow-scripts allow-forms"
+                className="flex-1 w-full bg-white"
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
+              </div>
+            )}
           </div>
         )}
 

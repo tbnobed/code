@@ -3,6 +3,7 @@ import { eq, desc, asc } from "drizzle-orm";
 import { db, sessionsTable, messagesTable } from "@workspace/db";
 import fs from "node:fs/promises";
 import { ZipArchive } from "archiver";
+import { makePreviewToken } from "./preview";
 import path from "node:path";
 import { createWorkspace, resolveInWorkspace, languageFromPath } from "../lib/workspace";
 import { DEFAULT_MODEL } from "../lib/ollama";
@@ -179,86 +180,12 @@ router.get("/sessions/:id/files", async (req, res) => {
   res.json(await walk(session.workspacePath));
 });
 
-// Live static preview of the workspace (serves the site the agent built).
-// GET /sessions/:id/preview/            -> index.html
-// GET /sessions/:id/preview/<any/path>  -> that file
-const MIME: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".htm": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".json": "application/json",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".ico": "image/x-icon",
-  ".txt": "text/plain; charset=utf-8",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".ttf": "font/ttf",
-  ".map": "application/json",
-};
-
-// Sites often reference assets with root-absolute paths ("/styles.css"),
-// which would escape the preview prefix and 404. Rewrite them to stay
-// under /sessions/:id/preview/.
-function rewriteRootUrls(content: string, base: string, kind: "html" | "css"): string {
-  let out = content;
-  if (kind === "html") {
-    out = out.replace(/(\s(?:href|src|action|poster)\s*=\s*["'])\/(?!\/)/gi, `$1${base}`);
-    out = out.replace(/(\ssrcset\s*=\s*["'])([^"']+)(["'])/gi, (_m, p1, val, p3) => {
-      return p1 + val.replace(/(^|,\s*)\/(?!\/)/g, `$1${base}`) + p3;
-    });
-  }
-  // url(/...) in inline <style> or css files
-  out = out.replace(/(url\(\s*["']?)\/(?!\/)/gi, `$1${base}`);
-  return out;
-}
-
-router.get(/^\/sessions\/(\d+)\/preview(\/.*)?$/, async (req, res) => {
-  const session = await getSessionOr404(req.params[0]!, res);
+// Issue a signed preview token (requires login); the preview routes
+// themselves are cookie-free because the sandboxed iframe drops cookies.
+router.get("/sessions/:id/preview-token", async (req, res) => {
+  const session = await getSessionOr404(req.params.id, res);
   if (!session) return;
-
-  // Redirect bare /preview to /preview/ so relative asset URLs resolve
-  if (req.params[1] === undefined) {
-    return res.redirect(301, `${req.baseUrl}/sessions/${session.id}/preview/`);
-  }
-
-  const relPath = decodeURIComponent(req.params[1]).replace(/^\/+/, "") || "index.html";
-  try {
-    let full = await resolveInWorkspace(session.workspacePath, relPath);
-    let stat = await fs.stat(full).catch(() => null);
-    if (stat?.isDirectory()) {
-      full = path.join(full, "index.html");
-      stat = await fs.stat(full).catch(() => null);
-    }
-    if (!stat?.isFile()) {
-      return res
-        .status(404)
-        .type("html")
-        .send(
-          `<html><body style="font-family:monospace;background:#111;color:#eee;display:grid;place-items:center;height:100vh"><div><h2>No preview yet</h2><p>The workspace has no <code>${relPath === "index.html" ? "index.html" : relPath}</code>. Ask the agent to build a website first.</p></div></body></html>`,
-        );
-    }
-    const ext = path.extname(full).toLowerCase();
-    res.setHeader("Content-Type", MIME[ext] ?? "application/octet-stream");
-    res.setHeader("Cache-Control", "no-store");
-    // Force an opaque origin even when opened in a new tab: agent-generated
-    // code must never run with the app's origin/auth context.
-    res.setHeader("Content-Security-Policy", "sandbox allow-scripts allow-forms");
-    if (ext === ".html" || ext === ".htm" || ext === ".css") {
-      const base = `${req.baseUrl}/sessions/${session.id}/preview/`;
-      const text = await fs.readFile(full, "utf8");
-      return res.send(rewriteRootUrls(text, base, ext === ".css" ? "css" : "html"));
-    }
-    return res.send(await fs.readFile(full));
-  } catch {
-    return res.status(404).json({ error: "File not found" });
-  }
+  res.json({ token: makePreviewToken(session.id) });
 });
 
 // Download the whole workspace as a zip (excludes node_modules/.git)
