@@ -552,6 +552,8 @@ components:
           type: ["string", "null"]
         toolCallId:
           type: ["string", "null"]
+        mode:
+          type: ["string", "null"]
         createdAt:
           type: string
           format: date-time

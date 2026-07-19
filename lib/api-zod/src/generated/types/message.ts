@@ -15,5 +15,7 @@ export interface Message {
   toolCalls?: string | null;
   /** @nullable */
   toolCallId?: string | null;
+  /** @nullable */
+  mode?: string | null;
   createdAt: Date;
 }

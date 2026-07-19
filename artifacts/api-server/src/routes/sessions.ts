@@ -9,6 +9,19 @@ import path from "node:path";
 import { createWorkspace, resolveInWorkspace, languageFromPath } from "../lib/workspace";
 import { DEFAULT_MODEL } from "../lib/ollama";
 import { runAgentTurn, runArchitectTurn } from "../lib/agent-loop";
+
+/** Turn low-level fetch/socket failures into something the user can act on. */
+function friendlyTurnError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : "Agent failed";
+  if (/fetch failed|ECONNREFUSED|ECONNRESET|socket|terminated|network error|Connection error/i.test(raw)) {
+    return (
+      "Lost the connection to Ollama mid-turn (" + raw + "). " +
+      "Check that Ollama is running and healthy on the host (ollama ps) — an over-long prompt or an out-of-memory model crash is the usual cause. " +
+      "Retry with a short instruction; avoid re-pasting large content, the conversation is already in the agent's context."
+    );
+  }
+  return raw;
+}
 import { runReviewTurn } from "../lib/review";
 import { reviewAvailable } from "../lib/anthropic";
 import { redactSecrets, workspaceEnv, makeStreamRedactor } from "../lib/agent-tools";
@@ -45,6 +58,7 @@ function serializeMessage(m: typeof messagesTable.$inferSelect) {
     content: m.content,
     toolCalls: m.toolCalls,
     toolCallId: m.toolCallId,
+    mode: m.mode,
     createdAt: m.createdAt.toISOString(),
   };
 }
@@ -192,7 +206,7 @@ router.post("/sessions/:id/chat", async (req, res) => {
     }
   } catch (err) {
     req.log.error({ err }, "agent turn failed");
-    send({ type: "error", message: err instanceof Error ? err.message : "Agent failed" });
+    send({ type: "error", message: friendlyTurnError(err) });
   } finally {
     try {
       const hash = await commitTurn(session.workspacePath, content);

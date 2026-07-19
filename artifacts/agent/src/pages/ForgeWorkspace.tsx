@@ -288,6 +288,16 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
     setInput(content);
   };
 
+  // One-click handoff: after an architect plan, have the coding agent build it.
+  const handleBuildPlan = () => {
+    if (isStreaming || isUploading) return;
+    setArchitectMode(false);
+    sendChat(
+      "Implement the architect's plan from the previous message: create and edit every file it specifies using your tools, then verify your work. Do not restate the plan.",
+      { architect: false },
+    );
+  };
+
   if (isLoadingSession) {
     return <div className="flex-1 flex items-center justify-center text-primary font-mono"><Loader2 className="w-8 h-8 animate-spin" /></div>;
   }
@@ -377,6 +387,11 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
     // Standard user or plain assistant message
     return <div className="whitespace-pre-wrap text-sm">{msg.content}</div>;
   };
+
+  // Durable architect-handoff gate: derived from persisted messages so it
+  // survives reloads and stays session-scoped (client stream state does not).
+  const lastMessage = sessionData.messages?.[sessionData.messages.length - 1];
+  const showBuildPlan = !isStreaming && lastMessage?.role === "assistant" && lastMessage?.mode === "architect";
 
   const lastUserMessageId = [...(sessionData.messages ?? [])]
     .reverse()
@@ -601,6 +616,18 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
 
           {/* Input Area */}
           <div className="p-4 bg-card border-t border-border shrink-0">
+            {showBuildPlan && (
+              <div className="max-w-3xl mx-auto mb-2">
+                <button
+                  type="button"
+                  onClick={handleBuildPlan}
+                  className="w-full flex items-center justify-center gap-2 bg-primary/10 border border-primary/40 hover:bg-primary/20 text-primary rounded-sm px-3 py-2 text-xs font-mono font-bold transition-colors"
+                >
+                  <Terminal className="w-3.5 h-3.5" />
+                  BUILD THIS PLAN — hand off to the coding agent
+                </button>
+              </div>
+            )}
             {(attachedFiles.length > 0 || uploadError) && (
               <div className="max-w-3xl mx-auto mb-2 space-y-1.5">
                 {attachedFiles.length > 0 && (

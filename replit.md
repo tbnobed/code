@@ -12,6 +12,7 @@ Self-hosted agentic coding assistant (a private "Replit Agent") that runs entire
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only; prod migrates via schema-init at boot)
 - Required env: `DATABASE_URL` — Postgres connection string; `SESSION_SECRET`; `ADMIN_PASSWORD` (first boot)
 - Optional env: `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_ARCHITECT_MODEL`, `OLLAMA_VISION_MODEL`; `ANTHROPIC_API_KEY` (+ `ANTHROPIC_BASE_URL`, `ANTHROPIC_REVIEW_MODEL`) enables "Send for review"; `IMAGE_GEN_URL` (+ `IMAGE_GEN_PROVIDER`/`IMAGE_GEN_MODEL`/`IMAGE_GEN_STEPS`/`IMAGE_GEN_TIMEOUT_MS`) enables the local Stable Diffusion `generate_image` tool (A1111 `--api` or ComfyUI)
+- `OLLAMA_NUM_CTX` (default 32768): token budget for trimming chat history before sending to the model; must match the Ollama server's real context length (`OLLAMA_CONTEXT_LENGTH` on the host). History is trimmed oldest-first so the system prompt + tool schemas always survive.
 - Production: `docker compose up -d --build` on the DGX (app on port 3000)
 
 ## Stack

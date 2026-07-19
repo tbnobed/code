@@ -5,6 +5,7 @@ import { ollama, OLLAMA_BASE_URL } from "./ollama";
 import { toolDefinitions, executeTool, ARCHITECT_MODEL } from "./agent-tools";
 import { githubEnabled } from "./git-setup";
 import { imageGenAvailable } from "./image-gen";
+import { historyCharBudget, trimHistory } from "./context-budget";
 
 const IMAGE_GEN_NOTE =
   "\n- A local image generator is available through the generate_image tool. When the project needs visual assets (logos, icons, hero or background images, textures), generate real ones instead of using placeholders or external URLs.";
@@ -22,6 +23,7 @@ Guidelines:
 - fetch_url reads a web page or API as plain text. Use it when the user shares a link or you need documentation or reference material.
 - analyze_image looks at an image file (screenshot, mockup, photo) with a vision model and reports what it shows. Use it BEFORE building UI from an uploaded mockup or screenshot.
 - consult_architect asks a senior architect (a larger reasoning model) for a plan, review, or hard-bug diagnosis. It is slow — reserve it for genuinely difficult decisions or when the user asks for a plan/review, and pass the relevant file paths.
+- When the conversation already contains an implementation plan (from the architect or the user), do not restate or re-plan it. Execute it immediately: create and edit every file it describes with your tools, then verify. Plans are not deliverables — working files are.
 
 Web design standards — any website you build MUST look modern and professionally designed:
 - Always link the stylesheet with a relative path (href="styles.css", never href="/styles.css") and verify the file exists.
@@ -39,6 +41,11 @@ GitHub access:
 - To create a new repository, call the GitHub API: curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/user/repos -d '{"name":"<repo>","private":true}' — then add it as a remote and push.
 - Never print, echo, or write the GITHUB_TOKEN value anywhere.`
     : "");
+
+// Prompt budget (tokens). Must match the context window the Ollama server
+// actually runs the model with — see OLLAMA_CONTEXT_LENGTH on the Ollama side.
+const OLLAMA_NUM_CTX =
+  Number(process.env.OLLAMA_NUM_CTX) > 0 ? Number(process.env.OLLAMA_NUM_CTX) : 32_768;
 
 const MAX_ITERATIONS = 25;
 
@@ -73,23 +80,29 @@ export async function runAgentTurn(
     .where(eq(messagesTable.sessionId, session.id))
     .orderBy(asc(messagesTable.id));
 
-  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT + (imageGenAvailable() ? IMAGE_GEN_NOTE : "") },
-  ];
+  const historyMsgs: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
   for (const m of history) {
     if (m.role === "user") {
-      messages.push({ role: "user", content: m.content });
+      historyMsgs.push({ role: "user", content: m.content });
     } else if (m.role === "assistant") {
       const toolCalls = m.toolCalls ? JSON.parse(m.toolCalls) : undefined;
-      messages.push({
+      historyMsgs.push({
         role: "assistant",
         content: m.content || (toolCalls ? null : ""),
         ...(toolCalls?.length ? { tool_calls: toolCalls } : {}),
       });
     } else if (m.role === "tool" && m.toolCallId) {
-      messages.push({ role: "tool", content: m.content, tool_call_id: m.toolCallId });
+      historyMsgs.push({ role: "tool", content: m.content, tool_call_id: m.toolCallId });
     }
   }
+
+  // Full transcript (untrimmed) — the request-time trim below decides what the
+  // model actually sees on each call.
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: "system", content: SYSTEM_PROMPT + (imageGenAvailable() ? IMAGE_GEN_NOTE : "") },
+    ...historyMsgs,
+  ];
+  const historyBudget = historyCharBudget(OLLAMA_NUM_CTX);
 
   let newMessageCount = 1; // the user message
 
@@ -97,12 +110,20 @@ export async function runAgentTurn(
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       if (signal?.aborted) break;
 
+      // Re-trim before EVERY call — tool results appended during this turn
+      // regrow the prompt, and Ollama would silently front-truncate again
+      // (dropping the system prompt + tool schemas first).
+      const requestMessages = [
+        messages[0],
+        ...trimHistory(messages.slice(1), historyBudget),
+      ];
+
       let stream;
       try {
         stream = await ollama.chat.completions.create(
           {
             model: session.model,
-            messages,
+            messages: requestMessages,
             tools: toolDefinitions,
             stream: true,
           },
@@ -390,6 +411,7 @@ export async function runArchitectTurn(
       await db.insert(messagesTable).values({
         sessionId: session.id,
         role: "assistant",
+        mode: "architect",
         content: aborted ? `${clean}\n\n[Stopped by user]`.trim() : clean,
       });
       newMessageCount++;

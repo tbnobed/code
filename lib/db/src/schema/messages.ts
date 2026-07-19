@@ -12,6 +12,7 @@ export const messagesTable = pgTable("messages", {
   content: text("content").notNull().default(""),
   toolCalls: text("tool_calls"), // JSON string of OpenAI tool calls
   toolCallId: text("tool_call_id"), // for role=tool responses
+  mode: text("mode"), // 'architect' for architect-turn responses; null for normal turns
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

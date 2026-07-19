@@ -28,6 +28,13 @@ services:
       IMAGE_GEN_MODEL: ${IMAGE_GEN_MODEL:-}
       IMAGE_GEN_STEPS: ${IMAGE_GEN_STEPS:-20}
       IMAGE_GEN_TIMEOUT_MS: ${IMAGE_GEN_TIMEOUT_MS:-180000}
+      # Prompt budget (tokens) ForgeOS trims chat history to. MUST match the
+      # context window your Ollama server actually runs the model with —
+      # Ollama defaults to only 4096, which silently truncates the agent tool
+      # schemas away on long sessions (the agent then narrates plans instead
+      # of building). Set OLLAMA_CONTEXT_LENGTH=32768 on the Ollama host
+      # service and keep this value in sync.
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-32768}
       # Optional: enables the agent's GitHub push/pull sync (fine-grained PAT
       # with Contents read/write on the repos you want it to touch)
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}

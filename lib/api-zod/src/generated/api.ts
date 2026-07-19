@@ -183,6 +183,7 @@ export const GetSessionResponse = zod.object({
   "content": zod.string(),
   "toolCalls": zod.string().nullish(),
   "toolCallId": zod.string().nullish(),
+  "mode": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 }))
 })
@@ -212,6 +213,7 @@ export const ListMessagesResponseItem = zod.object({
   "content": zod.string(),
   "toolCalls": zod.string().nullish(),
   "toolCallId": zod.string().nullish(),
+  "mode": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListMessagesResponse = zod.array(ListMessagesResponseItem)
