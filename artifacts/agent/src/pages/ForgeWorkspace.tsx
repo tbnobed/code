@@ -185,13 +185,17 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
   // its requests — access is granted via a signed token in the URL instead.
   useEffect(() => {
     if (!showPreview) return;
-    fetch(`${import.meta.env.BASE_URL}api/sessions/${sessionId}/preview-token`, { credentials: "include" })
+    let cancelled = false;
+    setPreviewToken(null);
+    const refresh = () => fetch(`${import.meta.env.BASE_URL}api/sessions/${sessionId}/preview-token`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d) => setPreviewToken(d.token))
-      .catch(() => setPreviewToken(null));
-    // previewKey in deps: every reload (manual or live-refresh) gets a fresh
-    // short-lived token, so an open preview never outlives its token.
-  }, [showPreview, sessionId, previewKey]);
+      .then((d) => { if (!cancelled) setPreviewToken(d.token); })
+      .catch(() => { if (!cancelled) setPreviewToken(null); });
+    void refresh();
+    // Keep framework basePath stable across live refreshes; renew before expiry.
+    const timer = setInterval(refresh, 45 * 60_000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [showPreview, sessionId]);
 
   const previewUrl = previewToken
     ? `${import.meta.env.BASE_URL}api/sessions/${sessionId}/preview/${previewToken}/`
@@ -457,6 +461,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
             </div>
             {previewUrl ? (
               <iframe
+                key={`${sessionId}-${previewKey}`}
                 src={previewUrl}
                 title="Workspace preview"
                 referrerPolicy="no-referrer"

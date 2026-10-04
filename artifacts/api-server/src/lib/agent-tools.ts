@@ -242,6 +242,13 @@ export function workspaceEnv(githubToken?: string | null): NodeJS.ProcessEnv {
     if (k !== "GITHUB_TOKEN" && STRIP_ENV.test(k)) continue;
     env[k] = v;
   }
+  // The Forge server is production software; generated projects are development
+  // workspaces. Inheriting production mode silently omits build dependencies.
+  for (const k of Object.keys(env)) {
+    if (/^npm_config_(production|omit|only|include)$/i.test(k)) delete env[k];
+  }
+  env.NODE_ENV = "development";
+  env.npm_config_include = "dev";
   // Per-session override: the session owner's PAT takes precedence over the
   // legacy server-wide token so git operations run as the right account.
   if (githubToken) env.GITHUB_TOKEN = githubToken;

@@ -4,7 +4,9 @@ import { db, sessionsTable } from "@workspace/db";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import http from "node:http";
 import { resolveInWorkspace } from "../lib/workspace";
+import { detectFramework, frameworkPreview } from "../lib/framework-preview";
 
 // The preview iframe/tab is sandboxed (opaque origin), so browsers do NOT
 // send the session cookie for its asset requests (css/js/images 401'd).
@@ -71,9 +73,17 @@ function rewriteRootUrls(content: string, base: string, kind: "html" | "css"): s
 
 const router: IRouter = Router();
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
+}
+
+function previewError(title: string, detail: string) {
+  return `<html><body style="font:14px system-ui;background:#111;color:#eee;padding:32px"><h2>${escapeHtml(title)}</h2><pre style="white-space:pre-wrap">${escapeHtml(detail)}</pre><p>Fix the workspace, then reload the preview.</p></body></html>`;
+}
+
 // GET /sessions/:id/preview/:token/            -> index.html
 // GET /sessions/:id/preview/:token/<any/path>  -> that file
-router.get(/^\/sessions\/(\d+)\/preview\/([A-Za-z0-9_~-]+)(\/.*)?$/, async (req, res) => {
+router.all(/^\/sessions\/(\d+)\/preview\/([A-Za-z0-9_~-]+)(\/.*)?$/, async (req, res) => {
   const sessionId = Number(req.params[0]);
   const token = req.params[1]!;
   if (!verifyPreviewToken(sessionId, token)) {
@@ -87,13 +97,81 @@ router.get(/^\/sessions\/(\d+)\/preview\/([A-Za-z0-9_~-]+)(\/.*)?$/, async (req,
   // The token is a bearer credential in the URL: never let it propagate
   // to other sites via the Referer header.
   res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Content-Security-Policy", "sandbox allow-scripts allow-forms");
+  // Module scripts/fetches originate from the sandbox's opaque (null) origin.
+  // Authorization is the signed path, never cookies or CORS credentials.
+  res.removeHeader("Access-Control-Allow-Credentials");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Action");
+    return res.status(204).end();
+  }
 
-  // Redirect bare .../preview/<token> to .../<token>/ so relative URLs resolve
-  if (req.params[2] === undefined) {
+  const framework = await detectFramework(session.workspacePath);
+  // Static sites need a trailing slash; frameworks own their routing.
+  if (req.params[2] === undefined && !framework) {
     return res.redirect(301, base);
   }
 
-  const relPath = decodeURIComponent(req.params[2]).replace(/^\/+/, "") || "index.html";
+  if (framework) {
+    try {
+      const server = await frameworkPreview(session.workspacePath, framework, base.slice(0, -1));
+      if (res.destroyed) return;
+      const headers: http.OutgoingHttpHeaders = {};
+      // Never forward Forge cookies, auth headers, or proxy headers to code
+      // controlled by a generated project.
+      for (const name of ["accept", "content-type", "rsc", "next-router-state-tree", "next-router-prefetch", "next-action"]) {
+        if (req.headers[name]) headers[name] = req.headers[name];
+      }
+      let body: string | undefined;
+      if (req.body !== undefined && /application\/json/i.test(String(req.headers["content-type"]))) {
+        body = JSON.stringify(req.body);
+      } else if (req.body !== undefined && /application\/x-www-form-urlencoded/i.test(String(req.headers["content-type"]))) {
+        body = new URLSearchParams(req.body).toString();
+      }
+      if (body !== undefined) headers["content-length"] = Buffer.byteLength(body);
+      const upstream = http.request({
+        hostname: "127.0.0.1", port: server.port, method: req.method,
+        path: base.slice(0, -1) + (req.params[2] || "") + (req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : ""),
+        headers, timeout: 120_000,
+      }, response => {
+        res.status(response.statusCode || 502);
+        for (const name of ["content-type", "content-encoding", "content-length"]) {
+          if (response.headers[name]) res.setHeader(name, response.headers[name]!);
+        }
+        const location = response.headers.location;
+        if (location) {
+          // Keep framework redirects inside the signed preview; never allow a
+          // generated server to redirect into Forge's authenticated UI.
+          if (location === base.slice(0, -1) || location.startsWith(base) || location.startsWith(base.slice(0, -1) + "?")) res.setHeader("Location", location);
+          else if (location.startsWith("/") && !location.startsWith("//")) res.setHeader("Location", base + location.slice(1));
+          else { res.status(502); response.resume(); res.end("Unsupported preview redirect"); return; }
+        }
+        response.on("error", () => res.destroy());
+        response.pipe(res);
+      });
+      upstream.on("timeout", () => upstream.destroy(new Error("Preview request timed out")));
+      upstream.on("error", () => {
+        if (!res.headersSent) res.status(502).type("html").send(previewError("Preview server unavailable", "The framework server stopped or timed out. Check the project dependencies and reload."));
+        else res.destroy();
+      });
+      res.on("close", () => upstream.destroy());
+      if (body !== undefined) upstream.end(body);
+      else req.pipe(upstream);
+      return;
+    } catch (error) {
+      return res.status(503).type("html").send(previewError(
+        `${framework === "next" ? "Next.js" : "Vite"} preview could not start`,
+        `Run npm install --include=dev in this workspace. Resolve any configuration errors below.\n\n${error instanceof Error ? error.message : "Unknown startup error"}`,
+      ));
+    }
+  }
+  if (req.method !== "GET" && req.method !== "HEAD") return res.status(405).end();
+  let relPath: string;
+  try { relPath = decodeURIComponent(req.params[2]).replace(/^\/+/, "") || "index.html"; }
+  catch { return res.status(400).end("Invalid preview path"); }
   try {
     let full = await resolveInWorkspace(session.workspacePath, relPath);
     let stat = await fs.stat(full).catch(() => null);
@@ -106,7 +184,7 @@ router.get(/^\/sessions\/(\d+)\/preview\/([A-Za-z0-9_~-]+)(\/.*)?$/, async (req,
         .status(404)
         .type("html")
         .send(
-          `<html><body style="font-family:monospace;background:#111;color:#eee;display:grid;place-items:center;height:100vh"><div><h2>No preview yet</h2><p>The workspace has no <code>${relPath === "index.html" ? "index.html" : relPath}</code>. Ask the agent to build a website first.</p></div></body></html>`,
+          previewError("No preview entry point", `Could not find ${relPath}. Static websites need index.html in the workspace root. Next.js and Vite projects are detected through package.json and started automatically.`),
         );
     }
     const ext = path.extname(full).toLowerCase();

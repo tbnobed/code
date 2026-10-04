@@ -9,6 +9,7 @@ import path from "node:path";
 import { createWorkspace, resolveInWorkspace, languageFromPath } from "../lib/workspace";
 import { DEFAULT_MODEL } from "../lib/ollama";
 import { runAgentTurn, runArchitectTurn } from "../lib/agent-loop";
+import { stopFrameworkPreview } from "../lib/framework-preview";
 
 /** Turn low-level fetch/socket failures into something the user can act on. */
 function friendlyTurnError(err: unknown): string {
@@ -149,6 +150,7 @@ router.delete("/sessions/:id", async (req, res) => {
   const session = await getSessionOr404(req, res);
   if (!session) return;
   await db.delete(sessionsTable).where(eq(sessionsTable.id, session.id));
+  stopFrameworkPreview(session.workspacePath);
   await fs.rm(session.workspacePath, { recursive: true, force: true }).catch(() => {});
   res.status(204).end();
 });
