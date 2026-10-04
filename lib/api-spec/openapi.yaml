@@ -19,6 +19,55 @@ tags:
   - name: models
     description: Available Ollama model operations
 paths:
+  /sessions/{id}/runtime:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      operationId: getRuntime
+      tags: [workspace]
+      responses:
+        "200":
+          description: Managed application state and bounded logs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RuntimeStatus" }
+    put:
+      operationId: saveRuntime
+      tags: [workspace]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RuntimeSettings" }
+      responses:
+        "200":
+          description: Settings saved; running application stopped
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RuntimeStatus" }
+  /sessions/{id}/runtime/action:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    post:
+      operationId: controlRuntime
+      tags: [workspace]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RuntimeAction" }
+      responses:
+        "202":
+          description: Action accepted; poll runtime for progress
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RuntimeStatus" }
   /healthz:
     get:
       operationId: healthCheck
@@ -433,6 +482,35 @@ paths:
 
 components:
   schemas:
+    RuntimeSettings:
+      type: object
+      required: [command, backendCommand, backendDirectory]
+      properties:
+        command: { type: string, maxLength: 2000, description: "Empty uses automatic Next.js/Vite/static detection; custom command must listen on PORT." }
+        backendCommand: { type: string, maxLength: 2000 }
+        backendDirectory: { type: string, maxLength: 500, description: "Workspace-relative directory, default dot." }
+        environment:
+          type: object
+          additionalProperties: { type: string }
+          description: "Write-only environment updates. Empty values delete keys. Existing values are never returned."
+    RuntimeAction:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [run, stop, restart, install, build] }
+    RuntimeStatus:
+      type: object
+      required: [state, logs, error, framework, settings, environmentKeys, previewPath]
+      properties:
+        state: { type: string, enum: [stopped, installing, starting, running, building, error] }
+        logs: { type: string }
+        error: { type: string }
+        framework: { type: string }
+        settings: { $ref: "#/components/schemas/RuntimeSettings" }
+        environmentKeys:
+          type: array
+          items: { type: string }
+        previewPath: { type: string, description: "Signed preview path while running; empty otherwise." }
     HealthStatus:
       type: object
       properties:

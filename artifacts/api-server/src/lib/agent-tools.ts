@@ -65,6 +65,34 @@ export const toolDefinitions: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "get_runtime_status",
+      description: "Read the managed application's state and redacted server logs to diagnose startup, dependency, or preview errors.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "manage_runtime",
+      description: "Run, stop, restart, install dependencies, or production-build the managed application. Returns immediately; use get_runtime_status to check progress. Do not start duplicate servers in shell commands.",
+      parameters: { type: "object", properties: { action: { type: "string", enum: ["run", "stop", "restart", "install", "build"] } }, required: ["action"] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "configure_runtime",
+      description: "Configure application processes. Empty command auto-detects Next/Vite/static. Custom commands must listen on PORT. Optional backend is exposed at /api. Stops the app; does not change project environment secrets.",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" }, backendCommand: { type: "string" }, backendDirectory: { type: "string" } },
+        required: ["command", "backendCommand", "backendDirectory"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "run_command",
       description:
         "Run a shell command in the workspace directory. Returns stdout and stderr. 60 second timeout.",
@@ -247,7 +275,9 @@ export function workspaceEnv(githubToken?: string | null): NodeJS.ProcessEnv {
   for (const k of Object.keys(env)) {
     if (/^npm_config_(production|omit|only|include)$/i.test(k)) delete env[k];
   }
-  env.NODE_ENV = "development";
+  // Let tools choose their own mode: next build defaults to production,
+  // while next dev/Vite default to development. npm include handles installs.
+  delete env.NODE_ENV;
   env.npm_config_include = "dev";
   // Per-session override: the session owner's PAT takes precedence over the
   // legacy server-wide token so git operations run as the right account.
@@ -320,6 +350,32 @@ export async function executeTool(
   const extra = opts?.githubToken ? [opts.githubToken] : [];
   try {
     switch (name) {
+      case "manage_runtime": {
+        const action = String(args.action);
+        if (!["run", "stop", "restart", "install", "build"].includes(action)) return { result: "Invalid runtime action", isError: true };
+        const id = Number(path.basename(workspaceDir));
+        if (!Number.isInteger(id) || id <= 0) return { result: "Runtime requires a session workspace", isError: true };
+        const { controlRuntime, runtimeStatus } = await import("./runtime");
+        const { makePreviewToken } = await import("../routes/preview");
+        await controlRuntime(workspaceDir, action as "run" | "stop" | "restart" | "install" | "build", `/api/sessions/${id}/preview/${makePreviewToken(id)}`);
+        const status = await runtimeStatus(workspaceDir);
+        return { result: JSON.stringify({ ...status, previewPath: status.previewPath ? "[active preview]" : "" }), isError: false };
+      }
+      case "configure_runtime": {
+        const { runtimeBusy, stopRuntime } = await import("./runtime");
+        const { saveRuntimeConfig } = await import("./runtime-settings");
+        if (runtimeBusy(workspaceDir)) return { result: "Stop the runtime operation before changing settings.", isError: true };
+        const settings = { command: String(args.command ?? ""), backendCommand: String(args.backendCommand ?? ""), backendDirectory: String(args.backendDirectory ?? ".") };
+        if (settings.command.length > 2000 || settings.backendCommand.length > 2000 || settings.backendDirectory.length > 500) return { result: "Runtime settings too long", isError: true };
+        await saveRuntimeConfig(workspaceDir, settings);
+        stopRuntime(workspaceDir);
+        return { result: "Runtime configured and stopped. Use manage_runtime run, then get_runtime_status.", isError: false };
+      }
+      case "get_runtime_status": {
+        const { runtimeStatus } = await import("./runtime");
+        const status = await runtimeStatus(workspaceDir);
+        return { result: JSON.stringify({ ...status, previewPath: status.previewPath ? "[active preview]" : "" }), isError: false };
+      }
       case "create_file": {
         const rel = String(args.path ?? "").trim();
         const p = await resolveInWorkspace(workspaceDir, rel);

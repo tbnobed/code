@@ -15,7 +15,7 @@ test("production server environment does not omit workspace dev dependencies", (
     process.env.npm_config_production = "true";
     process.env.npm_config_only = "prod";
     const env = workspaceEnv();
-    assert.equal(env.NODE_ENV, "development");
+    assert.equal(env.NODE_ENV, undefined);
     assert.equal(env.npm_config_include, "dev");
     for (const key of keys.slice(1)) assert.equal(env[key], undefined);
     assert.equal(process.env.NODE_ENV, "production");

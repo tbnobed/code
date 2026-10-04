@@ -5,6 +5,66 @@
  * Agentic coding agent API
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * Write-only environment updates. Empty values delete keys. Existing values are never returned.
+ */
+export type RuntimeSettingsEnvironment = {[key: string]: string};
+
+export interface RuntimeSettings {
+  /**
+     * Empty uses automatic Next.js/Vite/static detection; custom command must listen on PORT.
+     * @maxLength 2000
+     */
+  command: string;
+  /** @maxLength 2000 */
+  backendCommand: string;
+  /**
+     * Workspace-relative directory, default dot.
+     * @maxLength 500
+     */
+  backendDirectory: string;
+  /** Write-only environment updates. Empty values delete keys. Existing values are never returned. */
+  environment?: RuntimeSettingsEnvironment;
+}
+
+export type RuntimeActionAction = typeof RuntimeActionAction[keyof typeof RuntimeActionAction];
+
+
+export const RuntimeActionAction = {
+  run: 'run',
+  stop: 'stop',
+  restart: 'restart',
+  install: 'install',
+  build: 'build',
+} as const;
+
+export interface RuntimeAction {
+  action: RuntimeActionAction;
+}
+
+export type RuntimeStatusState = typeof RuntimeStatusState[keyof typeof RuntimeStatusState];
+
+
+export const RuntimeStatusState = {
+  stopped: 'stopped',
+  installing: 'installing',
+  starting: 'starting',
+  running: 'running',
+  building: 'building',
+  error: 'error',
+} as const;
+
+export interface RuntimeStatus {
+  state: RuntimeStatusState;
+  logs: string;
+  error: string;
+  framework: string;
+  settings: RuntimeSettings;
+  environmentKeys: string[];
+  /** Signed preview path while running; empty otherwise. */
+  previewPath: string;
+}
+
 export interface HealthStatus {
   status: string;
 }

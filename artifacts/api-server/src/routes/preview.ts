@@ -6,7 +6,8 @@ import path from "node:path";
 import crypto from "node:crypto";
 import http from "node:http";
 import { resolveInWorkspace } from "../lib/workspace";
-import { detectFramework, frameworkPreview } from "../lib/framework-preview";
+import { runtimeTarget, runtimeStatus, appendRuntimeLog } from "../lib/runtime";
+import { previewBridge } from "../lib/preview-bridge";
 
 // The preview iframe/tab is sandboxed (opaque origin), so browsers do NOT
 // send the session cookie for its asset requests (css/js/images 401'd).
@@ -24,7 +25,7 @@ export function makePreviewToken(sessionId: number): string {
   return `${exp}~${sign(sessionId, exp)}`;
 }
 
-function verifyPreviewToken(sessionId: number, token: string): boolean {
+export function verifyPreviewToken(sessionId: number, token: string): boolean {
   const [expStr, sig] = token.split("~");
   const exp = Number(expStr);
   if (!Number.isFinite(exp) || exp < Date.now() || !sig) return false;
@@ -109,15 +110,18 @@ router.all(/^\/sessions\/(\d+)\/preview\/([A-Za-z0-9_~-]+)(\/.*)?$/, async (req,
     return res.status(204).end();
   }
 
-  const framework = await detectFramework(session.workspacePath);
+  let target;
+  try { target = await runtimeTarget(session.workspacePath, base.slice(0, -1), req.params[2] || "/"); }
+  catch (error) {
+    return res.status(503).type("html").send(previewError("Application is not ready", error instanceof Error ? error.message : "Click Run."));
+  }
   // Static sites need a trailing slash; frameworks own their routing.
-  if (req.params[2] === undefined && !framework) {
+  if (req.params[2] === undefined && !target.port) {
     return res.redirect(301, base);
   }
 
-  if (framework) {
+  if (target.port) {
     try {
-      const server = await frameworkPreview(session.workspacePath, framework, base.slice(0, -1));
       if (res.destroyed) return;
       const headers: http.OutgoingHttpHeaders = {};
       // Never forward Forge cookies, auth headers, or proxy headers to code
@@ -133,13 +137,21 @@ router.all(/^\/sessions\/(\d+)\/preview\/([A-Za-z0-9_~-]+)(\/.*)?$/, async (req,
       }
       if (body !== undefined) headers["content-length"] = Buffer.byteLength(body);
       const upstream = http.request({
-        hostname: "127.0.0.1", port: server.port, method: req.method,
-        path: base.slice(0, -1) + (req.params[2] || "") + (req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : ""),
+        hostname: "127.0.0.1", port: target.port, method: req.method,
+        path: (target.prefix ? base.slice(0, -1) + (req.params[2] || "") : (req.params[2] || "/")) + (req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : ""),
         headers, timeout: 120_000,
       }, response => {
         res.status(response.statusCode || 502);
-        for (const name of ["content-type", "content-encoding", "content-length"]) {
+        for (const name of ["content-type", "content-encoding"]) {
           if (response.headers[name]) res.setHeader(name, response.headers[name]!);
+        }
+        if ((response.statusCode || 200) >= 500) {
+          response.resume();
+          appendRuntimeLog(session.workspacePath, `\n[http] ${req.method} ${req.params[2] || "/"} returned ${response.statusCode}\n`);
+          void runtimeStatus(session.workspacePath).then(status => {
+            res.type("html").send(previewError("Application error", status.logs || "See the Runtime panel for server logs."));
+          }, () => res.end("Application failed. See runtime logs."));
+          return;
         }
         const location = response.headers.location;
         if (location) {
@@ -150,7 +162,18 @@ router.all(/^\/sessions\/(\d+)\/preview\/([A-Za-z0-9_~-]+)(\/.*)?$/, async (req,
           else { res.status(502); response.resume(); res.end("Unsupported preview redirect"); return; }
         }
         response.on("error", () => res.destroy());
-        response.pipe(res);
+        if (String(response.headers["content-type"]).includes("text/html") && !response.headers["content-encoding"]) {
+          let html = "";
+          response.on("data", chunk => {
+            html += chunk.toString();
+            if (html.length > 8 * 1024 * 1024) { response.destroy(); res.destroy(); }
+          });
+          response.on("end", () => {
+            const bridge = previewBridge(base.slice(0, -1));
+            if (!target.prefix) html = rewriteRootUrls(html, base, "html");
+            res.end(/<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, match => match + bridge) : bridge + html);
+          });
+        } else response.pipe(res);
       });
       upstream.on("timeout", () => upstream.destroy(new Error("Preview request timed out")));
       upstream.on("error", () => {
@@ -163,7 +186,7 @@ router.all(/^\/sessions\/(\d+)\/preview\/([A-Za-z0-9_~-]+)(\/.*)?$/, async (req,
       return;
     } catch (error) {
       return res.status(503).type("html").send(previewError(
-        `${framework === "next" ? "Next.js" : "Vite"} preview could not start`,
+        "Application preview could not start",
         `Run npm install --include=dev in this workspace. Resolve any configuration errors below.\n\n${error instanceof Error ? error.message : "Unknown startup error"}`,
       ));
     }
@@ -195,7 +218,8 @@ router.all(/^\/sessions\/(\d+)\/preview\/([A-Za-z0-9_~-]+)(\/.*)?$/, async (req,
     res.setHeader("Content-Security-Policy", "sandbox allow-scripts allow-forms");
     if (ext === ".html" || ext === ".htm" || ext === ".css") {
       const text = await fs.readFile(full, "utf8");
-      return res.send(rewriteRootUrls(text, base, ext === ".css" ? "css" : "html"));
+      const rewritten = rewriteRootUrls(text, base, ext === ".css" ? "css" : "html");
+      return res.send(ext === ".html" || ext === ".htm" ? previewBridge(base.slice(0, -1)) + rewritten : rewritten);
     }
     return res.send(await fs.readFile(full));
   } catch {

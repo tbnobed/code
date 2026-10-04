@@ -60,8 +60,8 @@ Self-hosted agentic coding assistant (a private "Replit Agent") that runs entire
 
 ## Gotchas
 
-- Workspace previews detect Next.js/Vite from package.json and run a local development server behind the signed preview path; plain static sites still use a root index.html. Dependencies must already be installed. Framework HMR WebSockets are not proxied; Forge's live/manual iframe reload handles updates. Up to three preview servers are kept, with 15-minute idle cleanup.
-- Workspace commands explicitly use development mode and include npm devDependencies, even when Forge itself runs in production. For older broken projects, run `npm install --include=dev` inside the workspace before reopening preview.
+- Workspace Runtime controls manage Run/Stop/Restart/Install/Build, automatic Next.js/Vite/static detection, custom frontend and optional backend commands, and write-only encrypted project environment values. See `docs/runtime.md`. Signed HTTP and WebSocket previews do not forward Forge cookies. Up to three projects run concurrently, with 15-minute idle cleanup.
+- Workspace shells leave NODE_ENV unset and explicitly include npm devDependencies; managed preview/install processes use development and managed builds use production. Avoid forcing development mode onto `next build`.
 
 - Restart the API Server workflow after backend changes (it runs an esbuild bundle, not a watcher). The frontend is Vite HMR — no restart needed.
 - After editing `lib/db` schema, run `npx tsc -b lib/db` (or root typecheck) — dependents typecheck against built `dist/` d.ts, which otherwise goes stale.

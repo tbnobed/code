@@ -30,6 +30,9 @@ import type {
   OllamaModel,
   PasswordBody,
   ReadWorkspaceFileRawParams,
+  RuntimeAction,
+  RuntimeSettings,
+  RuntimeStatus,
   Session,
   SessionInput,
   SessionWithMessages,
@@ -64,6 +67,209 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetRuntimeUrl = (id: number,) => {
+
+
+
+
+  return `/api/sessions/${id}/runtime`
+}
+
+export const getRuntime = async (id: number, options?: RequestInit): Promise<RuntimeStatus> => {
+
+  return customFetch<RuntimeStatus>(getGetRuntimeUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRuntimeQueryKey = (id: number,) => {
+    return [
+    `/api/sessions/${id}/runtime`
+    ] as const;
+    }
+
+
+export const getGetRuntimeQueryOptions = <TData = Awaited<ReturnType<typeof getRuntime>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRuntime>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRuntimeQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRuntime>>> = ({ signal }) => getRuntime(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRuntime>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRuntimeQueryResult = NonNullable<Awaited<ReturnType<typeof getRuntime>>>
+export type GetRuntimeQueryError = ErrorType<unknown>
+
+
+
+export function useGetRuntime<TData = Awaited<ReturnType<typeof getRuntime>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRuntime>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRuntimeQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveRuntimeUrl = (id: number,) => {
+
+
+
+
+  return `/api/sessions/${id}/runtime`
+}
+
+export const saveRuntime = async (id: number,
+    runtimeSettings: RuntimeSettings, options?: RequestInit): Promise<RuntimeStatus> => {
+
+  return customFetch<RuntimeStatus>(getSaveRuntimeUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(runtimeSettings)
+  }
+);}
+
+
+
+
+
+export const getSaveRuntimeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveRuntime>>, TError,{id: number;data: BodyType<RuntimeSettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveRuntime>>, TError,{id: number;data: BodyType<RuntimeSettings>}, TContext> => {
+
+const mutationKey = ['saveRuntime'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveRuntime>>, {id: number;data: BodyType<RuntimeSettings>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  saveRuntime(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveRuntimeMutationResult = NonNullable<Awaited<ReturnType<typeof saveRuntime>>>
+    export type SaveRuntimeMutationBody = BodyType<RuntimeSettings>
+    export type SaveRuntimeMutationError = ErrorType<unknown>
+
+    export const useSaveRuntime = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveRuntime>>, TError,{id: number;data: BodyType<RuntimeSettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveRuntime>>,
+        TError,
+        {id: number;data: BodyType<RuntimeSettings>},
+        TContext
+      > => {
+      return useMutation(getSaveRuntimeMutationOptions(options));
+    }
+
+export const getControlRuntimeUrl = (id: number,) => {
+
+
+
+
+  return `/api/sessions/${id}/runtime/action`
+}
+
+export const controlRuntime = async (id: number,
+    runtimeAction: RuntimeAction, options?: RequestInit): Promise<RuntimeStatus> => {
+
+  return customFetch<RuntimeStatus>(getControlRuntimeUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(runtimeAction)
+  }
+);}
+
+
+
+
+
+export const getControlRuntimeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof controlRuntime>>, TError,{id: number;data: BodyType<RuntimeAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof controlRuntime>>, TError,{id: number;data: BodyType<RuntimeAction>}, TContext> => {
+
+const mutationKey = ['controlRuntime'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof controlRuntime>>, {id: number;data: BodyType<RuntimeAction>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  controlRuntime(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ControlRuntimeMutationResult = NonNullable<Awaited<ReturnType<typeof controlRuntime>>>
+    export type ControlRuntimeMutationBody = BodyType<RuntimeAction>
+    export type ControlRuntimeMutationError = ErrorType<unknown>
+
+    export const useControlRuntime = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof controlRuntime>>, TError,{id: number;data: BodyType<RuntimeAction>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof controlRuntime>>,
+        TError,
+        {id: number;data: BodyType<RuntimeAction>},
+        TContext
+      > => {
+      return useMutation(getControlRuntimeMutationOptions(options));
+    }
 
 export const getHealthCheckUrl = () => {
 

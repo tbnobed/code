@@ -6,6 +6,7 @@ import previewRouter from "./preview";
 import usersRouter from "./users";
 import githubRouter from "./github";
 import modelsRouter from "./models";
+import runtimeRouter from "./runtime";
 import { requireAuth } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -15,6 +16,7 @@ router.use(authRouter);
 router.use(previewRouter); // token-authenticated (sandboxed iframes drop cookies)
 router.use(requireAuth); // everything below requires a logged-in user
 router.use(sessionsRouter);
+router.use(runtimeRouter);
 router.use(githubRouter);
 router.use(usersRouter);
 router.use(modelsRouter);

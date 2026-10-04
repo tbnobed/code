@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useGetSession, useListWorkspaceFiles, useReadWorkspaceFile, useGetCapabilities } from "@workspace/api-client-react";
-import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download, Paperclip, Upload, X, Pencil, Save, Square, RotateCcw, GitCommitHorizontal, SquareTerminal, Brain, ShieldCheck } from "lucide-react";
+import { useGetSession, useListWorkspaceFiles, useReadWorkspaceFile, useGetCapabilities, useGetRuntime, getGetRuntimeQueryKey } from "@workspace/api-client-react";
+import RuntimePanel, { type PreviewBrowserError } from "@/components/forge/RuntimePanel";
+import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download, Paperclip, Upload, X, Pencil, Save, Square, RotateCcw, GitCommitHorizontal, SquareTerminal, Brain, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import CheckpointsPanel from "@/components/forge/CheckpointsPanel";
 import GithubPanel from "@/components/GithubPanel";
@@ -179,27 +180,43 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
 
   const [showPreview, setShowPreview] = useState(false);
   const [previewKey, setPreviewKey] = useState(0);
-  const [previewToken, setPreviewToken] = useState<string | null>(null);
 
-  // The preview iframe is sandboxed, so browsers drop the session cookie for
-  // its requests — access is granted via a signed token in the URL instead.
+  const [showRuntime, setShowRuntime] = useState(true);
+  const runtimeQuery = useGetRuntime(sessionId, {
+    query: { enabled: !!sessionId, refetchInterval: 2000, queryKey: getGetRuntimeQueryKey(sessionId) },
+  });
+  const runtime = runtimeQuery.data;
+  const runtimeLive = runtime?.state === "running" && !!runtime.previewPath;
+  const runtimePreviewUrl = runtimeLive
+    ? `${import.meta.env.BASE_URL.replace(/\/+$/, "")}${runtime!.previewPath}`
+    : null;
+
+  const previewUrl = runtimePreviewUrl;
+
+  // Browser errors posted by the preview page; only trust our own iframe.
+  const previewIframeRef = useRef<HTMLIFrameElement>(null);
+  const [browserErrors, setBrowserErrors] = useState<PreviewBrowserError[]>([]);
+  useEffect(() => { setBrowserErrors([]); }, [sessionId]);
   useEffect(() => {
     if (!showPreview) return;
-    let cancelled = false;
-    setPreviewToken(null);
-    const refresh = () => fetch(`${import.meta.env.BASE_URL}api/sessions/${sessionId}/preview-token`, { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d) => { if (!cancelled) setPreviewToken(d.token); })
-      .catch(() => { if (!cancelled) setPreviewToken(null); });
-    void refresh();
-    // Keep framework basePath stable across live refreshes; renew before expiry.
-    const timer = setInterval(refresh, 45 * 60_000);
-    return () => { cancelled = true; clearInterval(timer); };
-  }, [showPreview, sessionId]);
-
-  const previewUrl = previewToken
-    ? `${import.meta.env.BASE_URL}api/sessions/${sessionId}/preview/${previewToken}/`
-    : null;
+    const onMessage = (event: MessageEvent) => {
+      const win = previewIframeRef.current?.contentWindow;
+      if (!win || event.source !== win) return;
+      const d = event.data as unknown;
+      let message: string | null = null;
+      if (typeof d === "string") message = d;
+      else if (d && typeof d === "object") {
+        const o = d as Record<string, unknown>;
+        const isErr = o.type === "forge-preview-error" || o.type === "error" || o.type === "forge:error" || o.type === "preview-error" || o.type === "unhandledrejection" || o.level === "error";
+        if (isErr) message = String(o.message ?? o.error ?? o.reason ?? "Unknown error");
+      }
+      if (!message) return;
+      const text = message.slice(0, 2000);
+      setBrowserErrors((prev) => [{ message: text, at: Date.now() }, ...prev].slice(0, 30));
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [showPreview]);
 
   const IMAGE_FILE_RE = /\.(png|jpe?g|gif|webp|bmp|avif|svg)$/i;
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -451,6 +468,10 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                 <Globe className="w-3.5 h-3.5 text-primary" /> LIVE_PREVIEW
               </span>
               <div className="flex items-center gap-1">
+                <span className="font-mono text-[9px] tracking-widest text-muted-foreground mr-1">{runtimeLive ? "RUNTIME" : "NOT RUNNING"}</span>
+                <Button variant={showRuntime ? "secondary" : "ghost"} size="icon" className="w-6 h-6" title="Runtime controls" aria-label="Toggle runtime controls" aria-pressed={showRuntime} onClick={() => setShowRuntime((v) => !v)}>
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                </Button>
                 <Button variant="ghost" size="icon" className="w-6 h-6" title="Reload preview" onClick={() => setPreviewKey((k) => k + 1)}>
                   <RefreshCw className="w-3.5 h-3.5" />
                 </Button>
@@ -459,9 +480,21 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                 </Button>
               </div>
             </div>
+            {showRuntime && (
+              <RuntimePanel
+                key={sessionId}
+                sessionId={sessionId}
+                runtime={runtime}
+                isLoading={runtimeQuery.isLoading}
+                loadError={runtimeQuery.isError}
+                browserErrors={browserErrors}
+                onClearBrowserErrors={() => setBrowserErrors([])}
+              />
+            )}
             {previewUrl ? (
               <iframe
-                key={`${sessionId}-${previewKey}`}
+                ref={previewIframeRef}
+                key={`${sessionId}-${previewKey}-${runtimeLive ? "rt" : "st"}`}
                 src={previewUrl}
                 title="Workspace preview"
                 referrerPolicy="no-referrer"
@@ -469,8 +502,10 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                 className="flex-1 w-full bg-white"
               />
             ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
+              <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">
+                {runtime && ["starting", "installing", "building"].includes(runtime.state)
+                  ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Check runtime logs for progress.</>
+                  : "Click Run to start this application. Open runtime controls above to configure it or view errors."}
               </div>
             )}
           </div>

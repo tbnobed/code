@@ -8,6 +8,109 @@
 import * as zod from 'zod';
 
 
+export const GetRuntimeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const getRuntimeResponseSettingsCommandMax = 2000;
+
+export const getRuntimeResponseSettingsBackendCommandMax = 2000;
+
+export const getRuntimeResponseSettingsBackendDirectoryMax = 500;
+
+
+
+export const GetRuntimeResponse = zod.object({
+  "state": zod.enum(['stopped', 'installing', 'starting', 'running', 'building', 'error']),
+  "logs": zod.string(),
+  "error": zod.string(),
+  "framework": zod.string(),
+  "settings": zod.object({
+  "command": zod.string().max(getRuntimeResponseSettingsCommandMax).describe('Empty uses automatic Next.js\/Vite\/static detection; custom command must listen on PORT.'),
+  "backendCommand": zod.string().max(getRuntimeResponseSettingsBackendCommandMax),
+  "backendDirectory": zod.string().max(getRuntimeResponseSettingsBackendDirectoryMax).describe('Workspace-relative directory, default dot.'),
+  "environment": zod.record(zod.string(), zod.string()).optional().describe('Write-only environment updates. Empty values delete keys. Existing values are never returned.')
+}),
+  "environmentKeys": zod.array(zod.string()),
+  "previewPath": zod.string().describe('Signed preview path while running; empty otherwise.')
+})
+
+
+export const SaveRuntimeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const saveRuntimeBodyCommandMax = 2000;
+
+export const saveRuntimeBodyBackendCommandMax = 2000;
+
+export const saveRuntimeBodyBackendDirectoryMax = 500;
+
+
+
+export const SaveRuntimeBody = zod.object({
+  "command": zod.string().max(saveRuntimeBodyCommandMax).describe('Empty uses automatic Next.js\/Vite\/static detection; custom command must listen on PORT.'),
+  "backendCommand": zod.string().max(saveRuntimeBodyBackendCommandMax),
+  "backendDirectory": zod.string().max(saveRuntimeBodyBackendDirectoryMax).describe('Workspace-relative directory, default dot.'),
+  "environment": zod.record(zod.string(), zod.string()).optional().describe('Write-only environment updates. Empty values delete keys. Existing values are never returned.')
+})
+
+export const saveRuntimeResponseSettingsCommandMax = 2000;
+
+export const saveRuntimeResponseSettingsBackendCommandMax = 2000;
+
+export const saveRuntimeResponseSettingsBackendDirectoryMax = 500;
+
+
+
+export const SaveRuntimeResponse = zod.object({
+  "state": zod.enum(['stopped', 'installing', 'starting', 'running', 'building', 'error']),
+  "logs": zod.string(),
+  "error": zod.string(),
+  "framework": zod.string(),
+  "settings": zod.object({
+  "command": zod.string().max(saveRuntimeResponseSettingsCommandMax).describe('Empty uses automatic Next.js\/Vite\/static detection; custom command must listen on PORT.'),
+  "backendCommand": zod.string().max(saveRuntimeResponseSettingsBackendCommandMax),
+  "backendDirectory": zod.string().max(saveRuntimeResponseSettingsBackendDirectoryMax).describe('Workspace-relative directory, default dot.'),
+  "environment": zod.record(zod.string(), zod.string()).optional().describe('Write-only environment updates. Empty values delete keys. Existing values are never returned.')
+}),
+  "environmentKeys": zod.array(zod.string()),
+  "previewPath": zod.string().describe('Signed preview path while running; empty otherwise.')
+})
+
+
+export const ControlRuntimeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ControlRuntimeBody = zod.object({
+  "action": zod.enum(['run', 'stop', 'restart', 'install', 'build'])
+})
+
+export const controlRuntimeResponseSettingsCommandMax = 2000;
+
+export const controlRuntimeResponseSettingsBackendCommandMax = 2000;
+
+export const controlRuntimeResponseSettingsBackendDirectoryMax = 500;
+
+
+
+export const ControlRuntimeResponse = zod.object({
+  "state": zod.enum(['stopped', 'installing', 'starting', 'running', 'building', 'error']),
+  "logs": zod.string(),
+  "error": zod.string(),
+  "framework": zod.string(),
+  "settings": zod.object({
+  "command": zod.string().max(controlRuntimeResponseSettingsCommandMax).describe('Empty uses automatic Next.js\/Vite\/static detection; custom command must listen on PORT.'),
+  "backendCommand": zod.string().max(controlRuntimeResponseSettingsBackendCommandMax),
+  "backendDirectory": zod.string().max(controlRuntimeResponseSettingsBackendDirectoryMax).describe('Workspace-relative directory, default dot.'),
+  "environment": zod.record(zod.string(), zod.string()).optional().describe('Write-only environment updates. Empty values delete keys. Existing values are never returned.')
+}),
+  "environmentKeys": zod.array(zod.string()),
+  "previewPath": zod.string().describe('Signed preview path while running; empty otherwise.')
+})
+
+
 /**
  * @summary Health check
  */

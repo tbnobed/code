@@ -3,6 +3,7 @@ import { seedAdminUser } from "./lib/auth";
 import { ensureSchema } from "./lib/schema-init";
 import { setupGit } from "./lib/git-setup";
 import { logger } from "./lib/logger";
+import { attachPreviewUpgrades } from "./lib/preview-upgrade";
 
 // Apply the schema (idempotent) and seed the admin account before accepting
 // traffic — this also migrates existing databases on updated builds.
@@ -24,7 +25,7 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
+const server = app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
@@ -32,3 +33,4 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
 });
+attachPreviewUpgrades(server);
