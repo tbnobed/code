@@ -5,6 +5,32 @@
  * Agentic coding agent API
  * OpenAPI spec version: 0.1.0
  */
+export type VisualDesignInputStyles = {[key: string]: string};
+
+export interface VisualDesignInput {
+  /**
+     * @minLength 1
+     * @maxLength 1000
+     */
+  selector: string;
+  styles: VisualDesignInputStyles;
+}
+
+export type VisualDesignStatusRules = {[key: string]: {[key: string]: string}};
+
+export interface VisualDesignStatus {
+  supported: boolean;
+  css: string;
+  error?: string;
+  rules: VisualDesignStatusRules;
+}
+
+export interface VisualDesignResult {
+  css: string;
+  /** @nullable */
+  checkpoint: string | null;
+}
+
 /**
  * Write-only environment updates. Empty values delete keys. Existing values are never returned.
  */

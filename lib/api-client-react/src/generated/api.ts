@@ -37,6 +37,9 @@ import type {
   SessionInput,
   SessionWithMessages,
   User,
+  VisualDesignInput,
+  VisualDesignResult,
+  VisualDesignStatus,
   WorkspaceFile,
   WorkspaceFileContent
 } from './api.schemas';
@@ -67,6 +70,208 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetVisualDesignUrl = (id: number,) => {
+
+
+
+
+  return `/api/sessions/${id}/design`
+}
+
+export const getVisualDesign = async (id: number, options?: RequestInit): Promise<VisualDesignStatus> => {
+
+  return customFetch<VisualDesignStatus>(getGetVisualDesignUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetVisualDesignQueryKey = (id: number,) => {
+    return [
+    `/api/sessions/${id}/design`
+    ] as const;
+    }
+
+
+export const getGetVisualDesignQueryOptions = <TData = Awaited<ReturnType<typeof getVisualDesign>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVisualDesign>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetVisualDesignQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getVisualDesign>>> = ({ signal }) => getVisualDesign(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getVisualDesign>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetVisualDesignQueryResult = NonNullable<Awaited<ReturnType<typeof getVisualDesign>>>
+export type GetVisualDesignQueryError = ErrorType<unknown>
+
+
+
+export function useGetVisualDesign<TData = Awaited<ReturnType<typeof getVisualDesign>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getVisualDesign>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetVisualDesignQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveVisualDesignUrl = (id: number,) => {
+
+
+
+
+  return `/api/sessions/${id}/design`
+}
+
+export const saveVisualDesign = async (id: number,
+    visualDesignInput: VisualDesignInput, options?: RequestInit): Promise<VisualDesignResult> => {
+
+  return customFetch<VisualDesignResult>(getSaveVisualDesignUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(visualDesignInput)
+  }
+);}
+
+
+
+
+
+export const getSaveVisualDesignMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveVisualDesign>>, TError,{id: number;data: BodyType<VisualDesignInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveVisualDesign>>, TError,{id: number;data: BodyType<VisualDesignInput>}, TContext> => {
+
+const mutationKey = ['saveVisualDesign'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveVisualDesign>>, {id: number;data: BodyType<VisualDesignInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  saveVisualDesign(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveVisualDesignMutationResult = NonNullable<Awaited<ReturnType<typeof saveVisualDesign>>>
+    export type SaveVisualDesignMutationBody = BodyType<VisualDesignInput>
+    export type SaveVisualDesignMutationError = ErrorType<unknown>
+
+    export const useSaveVisualDesign = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveVisualDesign>>, TError,{id: number;data: BodyType<VisualDesignInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveVisualDesign>>,
+        TError,
+        {id: number;data: BodyType<VisualDesignInput>},
+        TContext
+      > => {
+      return useMutation(getSaveVisualDesignMutationOptions(options));
+    }
+
+export const getResetVisualDesignUrl = (id: number,) => {
+
+
+
+
+  return `/api/sessions/${id}/design`
+}
+
+export const resetVisualDesign = async (id: number, options?: RequestInit): Promise<VisualDesignResult> => {
+
+  return customFetch<VisualDesignResult>(getResetVisualDesignUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getResetVisualDesignMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetVisualDesign>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resetVisualDesign>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['resetVisualDesign'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetVisualDesign>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  resetVisualDesign(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResetVisualDesignMutationResult = NonNullable<Awaited<ReturnType<typeof resetVisualDesign>>>
+
+    export type ResetVisualDesignMutationError = ErrorType<unknown>
+
+    export const useResetVisualDesign = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetVisualDesign>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resetVisualDesign>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getResetVisualDesignMutationOptions(options));
+    }
 
 export const getGetRuntimeUrl = (id: number,) => {
 

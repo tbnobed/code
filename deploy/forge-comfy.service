@@ -1,0 +1,13 @@
+[Unit]
+Description=ForgeOS local ComfyUI image generator
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/ComfyUI
+ExecStart=%h/ComfyUI/venv/bin/python main.py --listen 172.17.0.1 --port 7860
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

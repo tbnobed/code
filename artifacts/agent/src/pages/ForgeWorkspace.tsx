@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useGetSession, useListWorkspaceFiles, useReadWorkspaceFile, useGetCapabilities, useGetRuntime, getGetRuntimeQueryKey } from "@workspace/api-client-react";
+import DesignPanel from "@/components/forge/DesignPanel";
 import RuntimePanel, { type PreviewBrowserError } from "@/components/forge/RuntimePanel";
-import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download, Paperclip, Upload, X, Pencil, Save, Square, RotateCcw, GitCommitHorizontal, SquareTerminal, Brain, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download, Paperclip, Upload, X, Pencil, Save, Square, RotateCcw, GitCommitHorizontal, SquareTerminal, Brain, ShieldCheck, SlidersHorizontal, Crosshair, Monitor, Tablet, Smartphone } from "lucide-react";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import CheckpointsPanel from "@/components/forge/CheckpointsPanel";
 import GithubPanel from "@/components/GithubPanel";
@@ -182,6 +183,9 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
   const [previewKey, setPreviewKey] = useState(0);
 
   const [showRuntime, setShowRuntime] = useState(true);
+  const [showDesign, setShowDesign] = useState(false);
+  const [viewport, setViewport] = useState<"desktop" | "tablet" | "phone">("desktop");
+  const composerRef = useRef<HTMLInputElement>(null);
   const runtimeQuery = useGetRuntime(sessionId, {
     query: { enabled: !!sessionId, refetchInterval: 2000, queryKey: getGetRuntimeQueryKey(sessionId) },
   });
@@ -469,7 +473,19 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
               </span>
               <div className="flex items-center gap-1">
                 <span className="font-mono text-[9px] tracking-widest text-muted-foreground mr-1">{runtimeLive ? "RUNTIME" : "NOT RUNNING"}</span>
-                <Button variant={showRuntime ? "secondary" : "ghost"} size="icon" className="w-6 h-6" title="Runtime controls" aria-label="Toggle runtime controls" aria-pressed={showRuntime} onClick={() => setShowRuntime((v) => !v)}>
+                {showDesign && (
+                  <div role="group" aria-label="Preview width" className="flex items-center mr-1 border border-border rounded-sm">
+                    {([["desktop", Monitor], ["tablet", Tablet], ["phone", Smartphone]] as const).map(([id, Icon]) => (
+                      <Button key={id} variant={viewport === id ? "secondary" : "ghost"} size="icon" className="w-6 h-6 rounded-none" title={`${id} width`} aria-label={`${id} width`} aria-pressed={viewport === id} onClick={() => setViewport(id)}>
+                        <Icon className="w-3.5 h-3.5" />
+                      </Button>
+                    ))}
+                  </div>
+                )}
+                <Button variant={showDesign ? "secondary" : "ghost"} size="icon" className={cn("w-6 h-6", showDesign && "text-primary")} title="Design inspector" aria-label="Toggle design inspector" aria-pressed={showDesign} onClick={() => setShowDesign((v) => !v)}>
+                  <Crosshair className="w-3.5 h-3.5" />
+                </Button>
+                <Button variant={showRuntime && !showDesign ? "secondary" : "ghost"} size="icon" className="w-6 h-6" title="Runtime controls" aria-label="Toggle runtime controls" aria-pressed={showRuntime && !showDesign} onClick={() => { setShowDesign(false); setShowRuntime((v) => (showDesign ? true : !v)); }}>
                   <SlidersHorizontal className="w-3.5 h-3.5" />
                 </Button>
                 <Button variant="ghost" size="icon" className="w-6 h-6" title="Reload preview" onClick={() => setPreviewKey((k) => k + 1)}>
@@ -480,7 +496,19 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                 </Button>
               </div>
             </div>
-            {showRuntime && (
+            {showDesign ? (
+              <DesignPanel
+                key={`design-${sessionId}`}
+                sessionId={sessionId}
+                iframeRef={previewIframeRef}
+                previewUrl={previewUrl}
+                onSaved={refreshWorkspaceState}
+                onAskAgent={(prompt) => {
+                  setInput(prompt);
+                  requestAnimationFrame(() => composerRef.current?.focus());
+                }}
+              />
+            ) : showRuntime && (
               <RuntimePanel
                 key={sessionId}
                 sessionId={sessionId}
@@ -492,15 +520,20 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
               />
             )}
             {previewUrl ? (
+              <div className={cn("flex-1 min-h-0 flex justify-center overflow-auto", showDesign && viewport !== "desktop" && "bg-muted/40 p-3")}>
               <iframe
                 ref={previewIframeRef}
                 key={`${sessionId}-${previewKey}-${runtimeLive ? "rt" : "st"}`}
                 src={previewUrl}
+                onLoad={() => {
+                  previewIframeRef.current?.contentWindow?.postMessage({ type: "forge-design-mode", enabled: showDesign }, "*");
+                }}
                 title="Workspace preview"
                 referrerPolicy="no-referrer"
                 sandbox="allow-scripts allow-forms"
-                className="flex-1 w-full bg-white"
+                className={cn("h-full bg-white shrink-0", showDesign && viewport === "tablet" ? "w-[768px] max-w-none border border-border shadow-sm" : showDesign && viewport === "phone" ? "w-[390px] max-w-none border border-border shadow-sm" : "w-full")}
               />
+              </div>
             ) : (
               <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground text-center">
                 {runtime && ["starting", "installing", "building"].includes(runtime.state)
@@ -722,6 +755,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                 <ChevronRight className="w-5 h-5" />
               </div>
               <Input 
+                ref={composerRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onPaste={handlePaste}

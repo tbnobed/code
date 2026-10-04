@@ -8,6 +8,49 @@
 import * as zod from 'zod';
 
 
+export const GetVisualDesignParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetVisualDesignResponse = zod.object({
+  "supported": zod.boolean(),
+  "css": zod.string(),
+  "error": zod.string().optional(),
+  "rules": zod.record(zod.string(), zod.record(zod.string(), zod.string()))
+})
+
+
+export const SaveVisualDesignParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const saveVisualDesignBodySelectorMax = 1000;
+
+export const saveVisualDesignBodyStylesMaxOne = 100;
+
+
+
+export const SaveVisualDesignBody = zod.object({
+  "selector": zod.string().min(1).max(saveVisualDesignBodySelectorMax),
+  "styles": zod.record(zod.string(), zod.string().max(saveVisualDesignBodyStylesMaxOne))
+})
+
+export const SaveVisualDesignResponse = zod.object({
+  "css": zod.string(),
+  "checkpoint": zod.string().nullable()
+})
+
+
+export const ResetVisualDesignParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ResetVisualDesignResponse = zod.object({
+  "css": zod.string(),
+  "checkpoint": zod.string().nullable()
+})
+
+
 export const GetRuntimeParams = zod.object({
   "id": zod.coerce.number()
 })

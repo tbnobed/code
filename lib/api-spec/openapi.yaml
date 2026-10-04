@@ -19,6 +19,41 @@ tags:
   - name: models
     description: Available Ollama model operations
 paths:
+  /sessions/{id}/design:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      operationId: getVisualDesign
+      responses:
+        "200":
+          description: Visual design support and saved rules
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VisualDesignStatus" }
+    post:
+      operationId: saveVisualDesign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VisualDesignInput" }
+      responses:
+        "200":
+          description: Saved into application source
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VisualDesignResult" }
+    delete:
+      operationId: resetVisualDesign
+      responses:
+        "200":
+          description: Saved overrides cleared
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VisualDesignResult" }
   /sessions/{id}/runtime:
     parameters:
       - in: path
@@ -482,6 +517,32 @@ paths:
 
 components:
   schemas:
+    VisualDesignInput:
+      type: object
+      required: [selector, styles]
+      properties:
+        selector: { type: string, minLength: 1, maxLength: 1000 }
+        styles:
+          type: object
+          additionalProperties: { type: string, maxLength: 100 }
+    VisualDesignStatus:
+      type: object
+      required: [supported, css, rules]
+      properties:
+        supported: { type: boolean }
+        css: { type: string }
+        error: { type: string }
+        rules:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: { type: string }
+    VisualDesignResult:
+      type: object
+      required: [css, checkpoint]
+      properties:
+        css: { type: string }
+        checkpoint: { type: [string, "null"] }
     RuntimeSettings:
       type: object
       required: [command, backendCommand, backendDirectory]

@@ -22,10 +22,11 @@ FROM node:22-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-# git + curl for the agent's GitHub push/pull sync (and general tooling)
+# Tools used by generated workspaces, including native Node modules.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git curl ca-certificates \
+ && apt-get install -y --no-install-recommends git curl ca-certificates python3 python3-pip python3-venv build-essential pkg-config \
  && rm -rf /var/lib/apt/lists/*
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
 # Bundled server (esbuild output is self-contained)
 COPY --from=build /app/artifacts/api-server/dist ./dist
