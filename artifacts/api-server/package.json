@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:research-images": "esbuild src/lib/research-images.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/forge-research-images.cjs && node --test /tmp/forge-research-images.cjs",
     "test:database": "esbuild src/lib/project-database.integration.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/forge-project-db-test.cjs && node --test /tmp/forge-project-db-test.cjs",
     "test:platform": "esbuild src/lib/platform-context.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/forge-platform-tests.cjs && node --test /tmp/forge-platform-tests.cjs",
     "test:runtime": "esbuild src/lib/runtime.test.ts src/lib/framework-preview.test.ts --bundle --platform=node --format=cjs --outdir=/tmp/forge-runtime-tests && node --test /tmp/forge-runtime-tests/*.js",

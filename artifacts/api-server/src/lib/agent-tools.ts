@@ -6,8 +6,17 @@ import { resolveInWorkspace } from "./workspace";
 import { OLLAMA_BASE_URL } from "./ollama";
 import { clampDimension, generateImage, imageGenAvailable } from "./image-gen";
 import { platformCapabilities, platformContext } from "./platform-context";
+import { searchWeb } from "./web-search";
 
 export const toolDefinitions: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "search_web",
+      description: "Search the public web for real source URLs, titles and snippets. Use before fetch_url when researching without a known URL. Fetch primary sources to verify claims, cite returned URLs, and never invent documentation addresses. Reports explicitly if search is unavailable.",
+      parameters: { type: "object", properties: { query: { type: "string", description: "Specific search terms, preferably names and relevant keywords." } }, required: ["query"] },
+    },
+  },
   {
     type: "function",
     function: {
@@ -205,6 +214,7 @@ if (imageGenAvailable()) {
             type: "string",
             description: "Things to avoid in the image (optional)",
           },
+          model: { type: "string", enum: ["default", "flux2-klein", "sdxl"], description: "Use default for the configured model, flux2-klein for the newer local four-step model, or sdxl to compare with the previous checkpoint. FLUX distilled does not use negative prompts." },
         },
         required: ["prompt", "path"],
       },
@@ -367,6 +377,9 @@ export async function executeTool(
   const extra = opts?.githubToken ? [opts.githubToken] : [];
   try {
     switch (name) {
+      case "search_web": {
+        return { result: JSON.stringify(await searchWeb(String(args.query ?? ""), signal)), isError: false };
+      }
       case "project_database": {
         const database = await import("./project-database");
         let result;
@@ -521,6 +534,9 @@ export async function executeTool(
         });
       }
       case "generate_image": {
+        if (args.model !== undefined && !["default", "flux2-klein", "sdxl"].includes(String(args.model))) {
+          return { result: "Unsupported image model. Choose default, flux2-klein or sdxl.", isError: true };
+        }
         const rel = String(args.path ?? "").trim();
         if (!rel || !/\.png$/i.test(rel)) {
           return {
@@ -533,9 +549,10 @@ export async function executeTool(
           return { result: "Provide a prompt describing the image to generate", isError: true };
         }
         const p = await resolveInWorkspace(workspaceDir, rel);
-        const { png, width, height, provider } = await generateImage(
+        const { png, width, height, provider, model } = await generateImage(
           {
             prompt,
+            model: ["default", "flux2-klein", "sdxl"].includes(String(args.model)) ? args.model as "default" | "flux2-klein" | "sdxl" : "default",
             negativePrompt: args.negative_prompt ? String(args.negative_prompt) : undefined,
             width: clampDimension(args.width),
             height: clampDimension(args.height),
@@ -545,7 +562,7 @@ export async function executeTool(
         await fs.mkdir(path.dirname(p), { recursive: true });
         await fs.writeFile(p, png);
         return {
-          result: `Generated ${width}x${height} image via ${provider} → ${rel} (${Math.max(1, Math.round(png.length / 1024))} KB)`,
+          result: `Generated ${width}x${height} image via ${provider} (${model}) → ${rel} (${Math.max(1, Math.round(png.length / 1024))} KB). Inspect it with analyze_image and check the brief before using it. ${model === "flux2-klein" && args.negative_prompt ? "This distilled model does not apply negative prompts; describe the desired result in the positive prompt." : ""}`,
           isError: false,
         };
       }

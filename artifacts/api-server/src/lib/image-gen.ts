@@ -10,6 +10,7 @@
  * All ImageGenError messages are user-safe (surfaced as tool results in chat).
  */
 
+import { fluxKleinGraph } from "./image-workflows";
 export class ImageGenError extends Error {}
 
 type Provider = "a1111" | "comfyui";
@@ -198,11 +199,14 @@ function comfyGraph(
 async function generateComfy(
   base: string,
   opts: Required<Pick<GenerateImageOptions, "prompt" | "width" | "height">> &
-    Pick<GenerateImageOptions, "negativePrompt">,
+    Pick<GenerateImageOptions, "negativePrompt" | "model">,
   signal: AbortSignal | undefined,
 ): Promise<Buffer> {
   const { steps, timeoutMs, model } = cfg();
-  const ckpt = model || (await comfyFirstCheckpoint(base));
+  const workflow = opts.model && opts.model !== "default" ? opts.model : (process.env.IMAGE_GEN_WORKFLOW || "sdxl");
+  if (!["sdxl", "flux2-klein"].includes(workflow)) throw new ImageGenError("Unsupported IMAGE_GEN_WORKFLOW. Choose sdxl or flux2-klein.");
+  const ckpt = workflow === "sdxl" ? (model || await comfyFirstCheckpoint(base)) : "FLUX.2 klein 4B";
+  const graph = workflow === "flux2-klein" ? fluxKleinGraph(opts.prompt, opts.width, opts.height) : comfyGraph(ckpt, opts, steps);
   const deadline = Date.now() + timeoutMs;
 
   let submit: Response;
@@ -210,7 +214,7 @@ async function generateComfy(
     submit = await fetch(`${base}/prompt`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: comfyGraph(ckpt, opts, steps), client_id: "forge-agent" }),
+      body: JSON.stringify({ prompt: graph, client_id: "forge-agent" }),
       signal: combineSignals(signal, 30_000),
     });
   } catch (err) {
@@ -274,6 +278,7 @@ async function generateComfy(
 // Public API
 
 export interface GenerateImageOptions {
+  model?: "default" | "flux2-klein" | "sdxl";
   prompt: string;
   negativePrompt?: string;
   width?: number;
@@ -283,17 +288,19 @@ export interface GenerateImageOptions {
 export async function generateImage(
   opts: GenerateImageOptions,
   signal?: AbortSignal,
-): Promise<{ png: Buffer; width: number; height: number; provider: Provider }> {
+): Promise<{ png: Buffer; width: number; height: number; provider: Provider; model: string }> {
   const { url } = cfg();
   if (!url) throw new ImageGenError("Image generation is not configured (IMAGE_GEN_URL is unset).");
   const width = clampDimension(opts.width);
   const height = clampDimension(opts.height);
   const provider = await detectProvider(url);
-  const full = { prompt: opts.prompt, negativePrompt: opts.negativePrompt, width, height };
+  if (provider === "a1111" && opts.model === "flux2-klein") throw new ImageGenError("FLUX.2 Klein requires the ComfyUI workflow; this provider is A1111.");
+  const full = { prompt: opts.prompt, negativePrompt: opts.negativePrompt, width, height, model: opts.model };
   const png =
     provider === "a1111"
       ? await generateA1111(url, full, signal)
       : await generateComfy(url, full, signal);
   if (png.length === 0) throw new ImageGenError("Image server returned an empty image.");
-  return { png, width, height, provider };
+  const model = provider === "a1111" ? (cfg().model || "provider default") : (opts.model && opts.model !== "default" ? opts.model : process.env.IMAGE_GEN_WORKFLOW || "sdxl");
+  return { png, width, height, provider, model };
 }

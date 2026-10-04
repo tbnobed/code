@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "qTrnwipMKvPUavueYkUxO"
+uri = "file://attached_assets/forge-flux-logo.png"
+type = "image"
+title = "FLUX.2 Klein — DGX test output"
+description = "Actual 1024×1024 image generated locally on your DGX in about 18 seconds. A raster sample demonstrating the new workflow, not an editable SVG."
+logical_id = "387ab4d1-8237-4f11-84e3-1eeeb4bcf474"
+content_hash = "sha256:2adf4497165976e4227eee103d8dd7fc3482e3c5e34594067faca164e1997127"
+size = 486463
+mtime_ms = 1791157779105
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:adbefa5e-d374-4098-9728-abe60a2a089d/387ab4d1-8237-4f11-84e3-1eeeb4bcf474/a7c6f5ff-8072-4ad8-bb8d-b3311ce2cee3"
+storage_version_token = "1791157963755031"
+content_type = "image/png"
