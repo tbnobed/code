@@ -46,6 +46,7 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
   const [turnKind, setTurnKind] = useState<TurnKind>("agent");
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const recoveryTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Callbacks live in refs so sendChat/stopStream keep a stable identity even
   // when callers pass inline closures. Without this, the unmount-cleanup
@@ -71,6 +72,13 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
     setStreamingText("");
     setStreamingThinking("");
     setActiveToolCall(null);
+    setSubmittedContent("");
+    setProgressStatus("Connecting to the agent…");
+    setElapsedSeconds(0);
+    setError(null);
+    setTurnKind("agent");
+    for (const timer of recoveryTimersRef.current) clearTimeout(timer);
+    recoveryTimersRef.current = [];
     if (hadStream && !opts?.silent) onStoppedRef.current?.();
   }, []);
 
@@ -79,6 +87,10 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
     if (abortControllerRef.current) return; // a turn is already in flight
 
     const ac = new AbortController();
+    // Keep callbacks associated with the session that opened this request,
+    // never whichever session happens to be rendered when it finishes.
+    const doneForRequest = onDoneRef.current;
+    const toolResultForRequest = onToolResultRef.current;
     abortControllerRef.current = ac;
     setIsStreaming(true);
     setError(null);
@@ -97,6 +109,7 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
           : {}),
         signal: ac.signal,
       });
+      if (ac.signal.aborted || abortControllerRef.current !== ac) return;
 
       if (!response.ok) {
         // Non-SSE failures (e.g. review 503 when unconfigured) carry a JSON
@@ -122,6 +135,10 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
       while (true) {
         const { done, value } = await reader.read();
 
+        if (ac.signal.aborted || abortControllerRef.current !== ac) {
+          await reader.cancel();
+          break;
+        }
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
@@ -130,6 +147,7 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
         buffer = lines.pop() || "";
 
         for (const line of lines) {
+          if (ac.signal.aborted || abortControllerRef.current !== ac) break;
           if (line.startsWith('data: ')) {
             const dataStr = line.slice(6).trim();
             if (!dataStr) continue;
@@ -157,13 +175,13 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
                   break;
                 case "tool_result":
                   setActiveToolCall(null);
-                  onToolResultRef.current?.(event.name, event.isError);
+                  toolResultForRequest?.(event.name, event.isError);
                   break;
                 case "error":
                   setError(event.message);
                   break;
                 case "done":
-                  onDoneRef.current?.();
+                  doneForRequest?.();
                   break;
               }
             } catch (e) {
@@ -186,13 +204,15 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
             : msg || "An error occurred during chat",
         );
         // Show whatever the turn persisted before the connection died.
-        onDoneRef.current?.();
+        doneForRequest?.();
         if (transportDrop) {
           // The server persists the partial turn + checkpoint AFTER it sees
           // the socket drop, so a single immediate refresh can race it —
           // refresh again like the stop path does.
-          setTimeout(() => onDoneRef.current?.(), 400);
-          setTimeout(() => onDoneRef.current?.(), 1500);
+          recoveryTimersRef.current.push(
+            setTimeout(() => doneForRequest?.(), 400),
+            setTimeout(() => doneForRequest?.(), 1500),
+          );
         }
       }
     } finally {
@@ -217,12 +237,13 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
   /** Send the session's work to Claude for an external code review. */
   const sendReview = useCallback(() => startStream("review", undefined, "review"), [startStream]);
 
-  // Cleanup on unmount only (stopStream is referentially stable).
+  // A session change is also a hard stream boundary, even if this hook is
+  // reused outside the keyed workspace. Abort before the new session starts.
   useEffect(() => {
     return () => {
       stopStream({ silent: true });
     };
-  }, [stopStream]);
+  }, [stopStream, sessionId]);
 
   return {
     sendChat,

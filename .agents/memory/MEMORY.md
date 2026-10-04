@@ -3,3 +3,4 @@
 - [Framework preview constraints](framework-previews.md) — Next custom-server config reloads, signed base paths, and workspace development environments.
 - [Product direction](product-direction.md) — Replit-like full application execution and visual design are core ForgeOS goals.
 - [DGX GPU compatibility](dgx-gpu-compatibility.md) — verify GPU execution before replacing ARM64 CUDA wheels based on packaging warnings.
+- [React hook tests](react-hook-tests.md) — keep React test runtime external to avoid scheduler hangs in bundled Node tests.

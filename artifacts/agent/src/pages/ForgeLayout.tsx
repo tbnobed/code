@@ -296,7 +296,7 @@ export default function ForgeLayout() {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col relative overflow-hidden bg-background">
         {activeSessionId ? (
-          <ForgeWorkspace sessionId={activeSessionId} />
+          <ForgeWorkspace key={activeSessionId} sessionId={activeSessionId} />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8 relative">
             {/* Background decorative elements */}
