@@ -3,11 +3,11 @@ name: Framework preview constraints
 description: Non-obvious runtime constraints for Next.js/Vite previews inside Forge.
 ---
 
-Workspace commands must use a development environment independently of the production Forge server.
+Workspace dependency installs and preview servers must use a development environment independently of the production Forge server; production builds must explicitly use production mode.
 
 **Why:** Production NODE_ENV and npm omit/production settings caused repeated successful-looking installs that left Tailwind build dependencies absent.
 
-**How to apply:** Preserve the server's production settings, but clear inherited npm omission settings and explicitly include development dependencies in workspace child environments.
+**How to apply:** Preserve the server's production settings, but clear inherited npm omission settings and explicitly include development dependencies in workspace child environments. Run Next builds with `NODE_ENV=production npm run build`. The user confirmed on the DGX that this resolved Next's global-error prerender useContext failure without changing React versions; inheriting development mode for production builds is not safe.
 
 Next.js custom development servers may ignore the conf argument to next() because the routing server independently reloads configuration. Next's config module also exposes default through a getter, so assigning to default does not reliably replace the loader.
 
