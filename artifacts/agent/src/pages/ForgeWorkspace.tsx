@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { cn, formatBytes, formatDate } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetSessionQueryKey, getListWorkspaceFilesQueryKey } from "@workspace/api-client-react";
@@ -180,6 +181,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
   });
 
   const [showPreview, setShowPreview] = useState(false);
+  const [resizingPanels, setResizingPanels] = useState(false);
   const [previewKey, setPreviewKey] = useState(0);
 
   const [showRuntime, setShowRuntime] = useState(true);
@@ -463,10 +465,16 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
+      <ResizablePanelGroup
+        key={showPreview ? "with-preview" : "chat-only"}
+        direction="horizontal"
+        autoSaveId={showPreview ? "forge-workspace-with-preview" : "forge-workspace-chat-only"}
+        className="flex-1 min-h-0 overflow-hidden"
+      >
         {/* Live Site Preview (side by side with chat) */}
         {showPreview && (
-          <div className="flex-1 flex flex-col border-r border-border bg-background min-w-[320px]">
+          <>
+          <ResizablePanel id="preview" order={1} defaultSize={40} minSize={20} className="flex flex-col bg-background min-w-0">
             <div className="h-9 border-b border-border bg-muted/50 flex items-center justify-between px-3 shrink-0">
               <span className="font-mono text-[10px] font-bold tracking-widest text-muted-foreground flex items-center gap-2">
                 <Globe className="w-3.5 h-3.5 text-primary" /> LIVE_PREVIEW
@@ -520,7 +528,8 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
               />
             )}
             {previewUrl ? (
-              <div className={cn("flex-1 min-h-0 flex justify-center overflow-auto", showDesign && viewport !== "desktop" && "bg-muted/40 p-3")}>
+              <div className={cn("flex-1 min-h-0 flex justify-center overflow-auto relative", showDesign && viewport !== "desktop" && "bg-muted/40 p-3")}>
+              {resizingPanels && <div className="absolute inset-0 z-30 cursor-col-resize" />}
               <iframe
                 ref={previewIframeRef}
                 key={`${sessionId}-${previewKey}-${runtimeLive ? "rt" : "st"}`}
@@ -541,12 +550,21 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                   : "Click Run to start this application. Open runtime controls above to configure it or view errors."}
               </div>
             )}
-          </div>
+          </ResizablePanel>
+          <ResizableHandle
+            withHandle
+            onDragging={setResizingPanels}
+            aria-label="Resize preview and chat"
+            title="Drag to resize preview and chat; use arrow keys when focused"
+            className="w-2 bg-border/50 hover:bg-primary/40 data-[resize-handle-active]:bg-primary/60 transition-colors"
+          />
+          </>
         )}
 
         {/* Main Chat Area */}
+        <ResizablePanel id="chat" order={2} defaultSize={showPreview ? 38 : 72} minSize={25} className="flex min-w-0">
         <div
-          className={cn("flex-1 flex flex-col border-r border-border bg-background relative", showPreview ? "min-w-[320px]" : "min-w-[400px]")}
+          className="flex-1 min-w-0 flex flex-col bg-background relative"
           onDragEnter={handleDragEnter}
           onDragOver={(e) => e.preventDefault()}
           onDragLeave={handleDragLeave}
@@ -826,7 +844,15 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
         </div>
 
         {/* Workspace Sidebar */}
-        <div className="w-80 flex flex-col bg-card shrink-0 shadow-[-10px_0_15px_-5px_rgba(0,0,0,0.05)] z-10 relative">
+        </ResizablePanel>
+        <ResizableHandle
+          withHandle
+          onDragging={setResizingPanels}
+          aria-label="Resize chat and workspace files"
+          title="Drag to resize chat and files; use arrow keys when focused"
+          className="w-2 bg-border/50 hover:bg-primary/40 data-[resize-handle-active]:bg-primary/60 transition-colors"
+        />
+        <ResizablePanel id="workspace" order={3} defaultSize={showPreview ? 22 : 28} minSize={15} maxSize={50} className="flex flex-col bg-card min-w-0 shadow-[-10px_0_15px_-5px_rgba(0,0,0,0.05)] z-10 relative">
           
           {/* File Viewer Modal equivalent (shown in sidebar for density) */}
           {selectedFile && (
@@ -1008,8 +1034,8 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
           </ScrollArea>
           </>
           )}
-        </div>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }
