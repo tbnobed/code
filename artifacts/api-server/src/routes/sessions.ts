@@ -186,6 +186,7 @@ router.post("/sessions/:id/chat", async (req, res) => {
   }
 
   res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("X-Accel-Buffering", "no");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();

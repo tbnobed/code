@@ -167,7 +167,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
 
   const [architectMode, setArchitectMode] = useState(false);
   const { data: capabilities } = useGetCapabilities();
-  const { sendChat, sendReview, isStreaming, streamingText, streamingThinking, activeToolCall, error, stopStream, isArchitectTurn, isReviewTurn } = useChatStream({
+  const { sendChat, sendReview, isStreaming, streamingText, streamingThinking, activeToolCall, submittedContent, progressStatus, elapsedSeconds, error, stopStream, isArchitectTurn, isReviewTurn } = useChatStream({
     sessionId,
     onDone: refreshWorkspaceState,
     onToolResult: (name) => {
@@ -272,18 +272,20 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
     }
   }, [selectedFile, sessionId]);
 
-  // Auto-scroll chat to bottom
+  const followChatRef = useRef(true);
+  // Follow new output only while the reader is already at the bottom.
   useEffect(() => {
-    if (chatScrollRef.current) {
+    if (chatScrollRef.current && followChatRef.current) {
       const scrollElement = chatScrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
       if (scrollElement) {
         scrollElement.scrollTop = scrollElement.scrollHeight;
       }
     }
-  }, [sessionData?.messages, streamingText, activeToolCall]);
+  }, [sessionData?.messages, streamingText, streamingThinking, activeToolCall]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    followChatRef.current = true;
     const trimmed = input.trim();
     // Block send mid-upload so the attachment note never misses in-flight files.
     if ((!trimmed && attachedFiles.length === 0) || isStreaming || isUploading) return;
@@ -578,7 +580,18 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
               <p className="font-mono text-[10px] text-muted-foreground">Files land in the session workspace for the agent to use</p>
             </div>
           )}
-          <ScrollArea ref={chatScrollRef} className="flex-1 p-6">
+          {isStreaming && submittedContent && (
+            <div className="shrink-0 border-b border-primary/30 bg-primary/5 px-6 py-3">
+              <div className="text-[10px] font-mono font-bold text-primary mb-1">YOUR CURRENT REQUEST</div>
+              <div className="text-sm whitespace-pre-wrap break-words max-h-32 overflow-y-auto">{submittedContent}</div>
+            </div>
+          )}
+          <ScrollArea ref={chatScrollRef} className="flex-1 min-h-0 p-6" onScrollCapture={(event) => {
+            const target = event.target as HTMLElement;
+            if (target.hasAttribute("data-radix-scroll-area-viewport")) {
+              followChatRef.current = target.scrollHeight - target.scrollTop - target.clientHeight < 100;
+            }
+          }}>
             <div className="space-y-6 max-w-3xl mx-auto pb-12">
               
               {/* Intro message */}
@@ -684,20 +697,21 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                         <div className="bg-primary/10 px-3 py-2 flex items-center gap-2 border-b border-primary/20">
                           <Loader2 className="w-4 h-4 text-primary animate-spin" />
                           <span className="font-mono text-xs font-bold text-primary tracking-wide">
-                            EXECUTING: {activeToolCall.name}
+                            {activeToolCall.preparing ? "PREPARING" : "EXECUTING"}: {activeToolCall.name}
                           </span>
                         </div>
-                        <div className="p-3 bg-background font-mono text-xs text-muted-foreground overflow-x-auto whitespace-pre">
+                        <div className="p-3 bg-background font-mono text-xs text-muted-foreground max-h-64 overflow-auto whitespace-pre">
                           {activeToolCall.arguments}
                         </div>
                       </div>
                     )}
 
                     {/* Waiting state before anything streams */}
-                    {!streamingText && !streamingThinking && !activeToolCall && (
+                    {!activeToolCall && (
                       <div className="flex items-center gap-3 text-muted-foreground text-sm font-mono italic">
                         <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                        {isArchitectTurn ? "Architect is thinking..." : isReviewTurn ? "Claude is reviewing this session\u2019s work..." : "Generating response..."}
+                        {isArchitectTurn ? "Architect is thinking..." : isReviewTurn ? "Claude is reviewing this session\u2019s work..." : progressStatus}
+                        <span className="text-xs tabular-nums">{elapsedSeconds}s elapsed</span>
                       </div>
                     )}
                   </div>

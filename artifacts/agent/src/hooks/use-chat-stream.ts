@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 
 type StreamEvent =
+  | { type: "status"; message: string }
+  | { type: "tool_progress"; name: string; arguments: string }
   | { type: "text"; content: string }
   | { type: "thinking"; content: string }
   | { type: "tool_call"; name: string; arguments: string }
@@ -29,7 +31,17 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
   const [streamingText, setStreamingText] = useState("");
   // Architect-mode reasoning trace (never persisted — display only).
   const [streamingThinking, setStreamingThinking] = useState("");
-  const [activeToolCall, setActiveToolCall] = useState<{name: string, arguments: string} | null>(null);
+  const [activeToolCall, setActiveToolCall] = useState<{name: string, arguments: string, preparing?: boolean} | null>(null);
+  const [submittedContent, setSubmittedContent] = useState("");
+  const [progressStatus, setProgressStatus] = useState("Connecting to the agent…");
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  useEffect(() => {
+    if (!isStreaming) return;
+    const start = Date.now();
+    setElapsedSeconds(0);
+    const timer = setInterval(() => setElapsedSeconds(Math.floor((Date.now() - start) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [isStreaming]);
   // What kind of turn the current/last stream was (drives the header UI).
   const [turnKind, setTurnKind] = useState<TurnKind>("agent");
 
@@ -74,6 +86,8 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
     setStreamingThinking("");
     setActiveToolCall(null);
     setTurnKind(kind);
+    setSubmittedContent(typeof (body as {content?: unknown})?.content === "string" ? (body as {content: string}).content : "");
+    setProgressStatus("Connecting to the agent…");
 
     try {
       const response = await fetch(`${import.meta.env.BASE_URL}api/sessions/${sessionId}/${path}`, {
@@ -124,7 +138,15 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
               const event: StreamEvent = JSON.parse(dataStr);
 
               switch (event.type) {
+                case "status":
+                  setProgressStatus(event.message);
+                  setActiveToolCall(null);
+                  break;
+                case "tool_progress":
+                  setActiveToolCall({ name: event.name, arguments: event.arguments, preparing: true });
+                  break;
                 case "text":
+                  setProgressStatus("Streaming response…");
                   setStreamingText(prev => prev + event.content);
                   break;
                 case "thinking":
@@ -208,6 +230,9 @@ export function useChatStream({ sessionId, onDone, onToolResult, onStopped }: Us
     isStreaming,
     streamingText,
     streamingThinking,
+    submittedContent,
+    progressStatus,
+    elapsedSeconds,
     activeToolCall,
     error,
     stopStream,

@@ -156,6 +156,7 @@ export async function runAgentTurn(
       ];
 
       let stream;
+      send({ type: "status", message: i === 0 ? "Waiting for the model's first output…" : "Waiting for the model's next step…" });
       try {
         stream = await ollama.chat.completions.create(
           {
@@ -174,6 +175,7 @@ export async function runAgentTurn(
       }
 
       let text = "";
+      let lastProgressAt = 0;
       // Accumulate tool calls across chunks
       const toolCallsAcc: { id: string; name: string; args: string }[] = [];
       let abortedMidStream = false;
@@ -211,6 +213,11 @@ export async function runAgentTurn(
             if (tc.id) toolCallsAcc[idx].id = tc.id;
             if (tc.function?.name) toolCallsAcc[idx].name += tc.function.name;
             if (tc.function?.arguments) toolCallsAcc[idx].args += tc.function.arguments;
+          }
+          const preparing = toolCallsAcc.filter(Boolean).at(-1);
+          if (preparing && Date.now() - lastProgressAt >= 100) {
+            send({ type: "tool_progress", name: preparing.name || "tool call", arguments: preparing.args.slice(-12000) });
+            lastProgressAt = Date.now();
           }
         }
       } catch (err) {
