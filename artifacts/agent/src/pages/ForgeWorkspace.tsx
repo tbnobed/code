@@ -2,11 +2,12 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useGetSession, useListWorkspaceFiles, useReadWorkspaceFile, useGetCapabilities, useGetRuntime, getGetRuntimeQueryKey } from "@workspace/api-client-react";
 import DesignPanel from "@/components/forge/DesignPanel";
 import RuntimePanel, { type PreviewBrowserError } from "@/components/forge/RuntimePanel";
-import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download, Paperclip, Upload, X, Pencil, Save, Square, RotateCcw, GitCommitHorizontal, SquareTerminal, Brain, ShieldCheck, SlidersHorizontal, Crosshair, Monitor, Tablet, Smartphone } from "lucide-react";
+import { Terminal, Send, Cpu, FileCode2, HardDrive, Loader2, AlertCircle, FileText, ChevronRight, CornerDownRight, Globe, RefreshCw, ExternalLink, Download, Paperclip, Upload, X, Pencil, Save, Square, RotateCcw, GitCommitHorizontal, SquareTerminal, Brain, ShieldCheck, SlidersHorizontal, Crosshair, Monitor, Tablet, Smartphone, Database } from "lucide-react";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import CheckpointsPanel from "@/components/forge/CheckpointsPanel";
 import GithubPanel from "@/components/GithubPanel";
 import TerminalPanel from "@/components/forge/TerminalPanel";
+import DatabasePanel from "@/components/forge/DatabasePanel";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -230,7 +231,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
   const [fileContent, setFileContent] = useState<{content: string, language: string} | null>(null);
   const [editDraft, setEditDraft] = useState<string | null>(null);
   const [isSavingFile, setIsSavingFile] = useState(false);
-  const [sideTab, setSideTab] = useState<"files" | "checkpoints" | "terminal">("files");
+  const [sideTab, setSideTab] = useState<"files" | "checkpoints" | "terminal" | "database">("files");
 
   const handleSaveFile = async () => {
     if (selectedFile === null || editDraft === null) return;
@@ -943,18 +944,19 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
               { id: "files", label: "FILES", Icon: HardDrive },
               { id: "checkpoints", label: "CHECKPOINTS", Icon: GitCommitHorizontal },
               { id: "terminal", label: "TERMINAL", Icon: SquareTerminal },
+              { id: "database", label: "DATABASE", Icon: Database },
             ] as const).map(({ id, label, Icon }) => (
               <button
                 key={id}
                 onClick={() => setSideTab(id)}
                 className={cn(
-                  "flex-1 px-1 py-2.5 font-mono text-[9px] font-bold tracking-widest flex items-center justify-center gap-1 border-b-2 transition-colors",
+                  "flex-1 min-w-0 px-1 py-2.5 font-mono text-[9px] font-bold tracking-widest flex items-center justify-center gap-1 border-b-2 transition-colors",
                   sideTab === id
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
-                <Icon className="w-3.5 h-3.5" /> {label}
+                <Icon className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{label}</span>
               </button>
             ))}
           </div>
@@ -962,6 +964,8 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
           {sideTab === "checkpoints" && (
             <CheckpointsPanel sessionId={sessionId} onReverted={refreshWorkspaceState} />
           )}
+
+          {sideTab === "database" && <DatabasePanel key={sessionId} sessionId={sessionId} />}
 
           {sideTab === "terminal" && (
             <TerminalPanel

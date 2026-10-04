@@ -19,6 +19,72 @@ tags:
   - name: models
     description: Available Ollama model operations
 paths:
+  /sessions/{id}/database:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    get:
+      operationId: getProjectDatabase
+      responses:
+        "200":
+          description: Database state and tables, never credentials
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectDatabaseStatus" }
+    post:
+      operationId: createProjectDatabase
+      responses:
+        "200":
+          description: Provisioned database and encrypted runtime environment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectDatabaseStatus" }
+    delete:
+      operationId: deleteProjectDatabase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmProjectDatabaseDeletion"
+      responses:
+        "200":
+          description: Database and role permanently removed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectDatabaseStatus" }
+  /sessions/{id}/database/query:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: integer }
+    post:
+      operationId: queryProjectDatabase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectDatabaseQueryInput"
+      responses:
+        "200":
+          description: Bounded SQL result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [columns, rows, rowCount, command, truncated]
+                properties:
+                  columns: { type: array, items: { type: string } }
+                  rows:
+                    type: array
+                    items: { type: array, items: {} }
+                  rowCount: { type: integer }
+                  command: { type: string }
+                  truncated: { type: boolean }
   /sessions/{id}/design:
     parameters:
       - in: path
@@ -517,6 +583,31 @@ paths:
 
 components:
   schemas:
+    ConfirmProjectDatabaseDeletion:
+      type: object
+      required: [confirm]
+      properties:
+        confirm: { type: boolean, enum: [true] }
+    ProjectDatabaseQueryInput:
+      type: object
+      required: [sql]
+      properties:
+        sql: { type: string, minLength: 1, maxLength: 20000 }
+    ProjectDatabaseStatus:
+      type: object
+      required: [provisioned]
+      properties:
+        provisioned: { type: boolean }
+        name: { type: string }
+        error: { type: string }
+        tables:
+          type: array
+          items:
+            type: object
+            required: [schema, name]
+            properties:
+              schema: { type: string }
+              name: { type: string }
     VisualDesignInput:
       type: object
       required: [selector, styles]

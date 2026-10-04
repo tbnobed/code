@@ -7,13 +7,15 @@ import { resolveGithubToken } from "./github";
 import { imageGenAvailable } from "./image-gen";
 import { historyCharBudget, trimHistory } from "./context-budget";
 import { readProjectNotes } from "./workspace";
+import { platformContext } from "./platform-context";
 
 const IMAGE_GEN_NOTE =
   "\n- A local image generator is available through the generate_image tool. When the project needs visual assets (logos, icons, hero or background images, textures), generate real ones instead of using placeholders or external URLs.";
 
-const SYSTEM_PROMPT = `You are Forge, an autonomous coding agent running locally. You help the user build software by creating files, editing them, and running commands inside a sandboxed workspace directory.
+const SYSTEM_PROMPT = `You are Forge, the autonomous coding agent built into ForgeOS, the user's self-hosted development platform. You help the user build software using the current project's files, commands and managed application runtime. Your workspace directory is a project inside ForgeOS, not the entire platform or a secure OS sandbox.
 
 Guidelines:
+- When a project needs persistent application data, use project_database with action create to provision its dedicated PostgreSQL database, then query to create the schema. DATABASE_URL is injected securely; never write it into source or NOTES.md. Restart an already-running app to pick up the environment. Use status to inspect existing tables. Do not substitute in-memory/mock data for a requested database. Get user confirmation before destructive SQL; table/data changes are not covered by file checkpoints.
 - Use your tools to do real work. Create actual files and run actual commands rather than only describing what to do.
 - Work step by step: plan briefly, then execute with tools, then verify (e.g. run the code or list files).
 - File paths are always relative to the workspace root.
@@ -116,6 +118,7 @@ export async function runAgentTurn(
   // never get the owner's PAT into tool shells they control. The prompt only
   // advertises git abilities when a token exists, and names the linked repo.
   const ghToken = await resolveGithubToken(actorUserId ?? session.userId);
+  const platformBlock = platformContext(Boolean(ghToken));
   const githubBlock = ghToken
     ? GITHUB_BLOCK +
       (session.githubRepo
@@ -129,14 +132,14 @@ export async function runAgentTurn(
     {
       role: "system",
       content:
-        SYSTEM_PROMPT + (imageGenAvailable() ? IMAGE_GEN_NOTE : "") + githubBlock + notesBlock,
+        SYSTEM_PROMPT + platformBlock + (imageGenAvailable() ? IMAGE_GEN_NOTE : "") + githubBlock + notesBlock,
     },
     ...historyMsgs,
   ];
   // Dynamic blocks ride inside the fixed reserved-token allowance, so shrink
   // the history budget by their size to keep the total within OLLAMA_NUM_CTX.
   const historyBudget =
-    historyCharBudget(OLLAMA_NUM_CTX) - notesBlock.length - githubBlock.length;
+    Math.max(0, historyCharBudget(OLLAMA_NUM_CTX) - notesBlock.length - githubBlock.length - platformBlock.length);
 
   let newMessageCount = 1; // the user message
 
@@ -322,7 +325,7 @@ export async function runAgentTurn(
   }
 }
 
-const ARCHITECT_SYSTEM_PROMPT = `You are Forge's architect — a senior software architect in a deep-dive conversation with the user about their project.
+const ARCHITECT_SYSTEM_PROMPT = `You are ForgeOS's architect — a senior software architect in a deep-dive conversation with the user about their project inside the ForgeOS development platform.
 
 - Think through problems rigorously: architecture, tradeoffs, edge cases, failure modes.
 - Give concrete recommendations with clear reasoning, not generic advice.
@@ -387,8 +390,9 @@ export async function runArchitectTurn(
     // prompt, NOTES.md, and file listing live. Budget the history to what
     // remains after those variable-size blocks (newest message always kept),
     // instead of a blind last-60 window.
+    const architectPlatformBlock = platformContext(undefined, "architect");
     const budget =
-      historyCharBudget(OLLAMA_NUM_CTX) - notesBlock.length - filesNote.length;
+      Math.max(0, historyCharBudget(OLLAMA_NUM_CTX) - notesBlock.length - filesNote.length - architectPlatformBlock.length);
     const recent: typeof flat = [];
     let used = 0;
     for (let i = flat.length - 1; i >= 0 && recent.length < 60; i--) {
@@ -403,8 +407,9 @@ export async function runArchitectTurn(
       body: JSON.stringify({
         model: ARCHITECT_MODEL,
         stream: true,
+        options: { num_ctx: OLLAMA_NUM_CTX },
         messages: [
-          { role: "system", content: ARCHITECT_SYSTEM_PROMPT + notesBlock + filesNote },
+          { role: "system", content: ARCHITECT_SYSTEM_PROMPT + architectPlatformBlock + notesBlock + filesNote },
           ...recent,
         ],
       }),

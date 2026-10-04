@@ -5,6 +5,30 @@
  * Agentic coding agent API
  * OpenAPI spec version: 0.1.0
  */
+export interface ConfirmProjectDatabaseDeletion {
+  confirm: true;
+}
+
+export interface ProjectDatabaseQueryInput {
+  /**
+     * @minLength 1
+     * @maxLength 20000
+     */
+  sql: string;
+}
+
+export type ProjectDatabaseStatusTablesItem = {
+  schema: string;
+  name: string;
+};
+
+export interface ProjectDatabaseStatus {
+  provisioned: boolean;
+  name?: string;
+  error?: string;
+  tables?: ProjectDatabaseStatusTablesItem[];
+}
+
 export type VisualDesignInputStyles = {[key: string]: string};
 
 export interface VisualDesignInput {
@@ -211,6 +235,14 @@ export interface PasswordBody {
 export interface ApiError {
   error: string;
 }
+
+export type QueryProjectDatabase200 = {
+  columns: string[];
+  rows: unknown[][];
+  rowCount: number;
+  command: string;
+  truncated: boolean;
+};
 
 export type ReadWorkspaceFileRawParams = {
 path: string;

@@ -1,0 +1,100 @@
+I am **Forge**, an autonomous coding agent that runs locally in a sandboxed workspace. I am not a platform like Replit, Cursor, or Claude Code. I have no backend, no API keys, no AI orchestration layer, no multi-agent system, and no persistent infrastructure.
+
+Let me explain *exactly* what I am:
+
+---
+
+## What I Am (Forge)
+
+**Forge** is a tool — specifically, an AI coding agent that operates through a defined set of tools:
+
+- `create_file`, `edit_file`, `read_file`, `list_files` (file system operations)
+- `run_command` (shell execution in sandbox)
+- `fetch_url`, `analyze_image`, `generate_image` (auxiliary capabilities)
+- `consult_architect` (consultation with another AI)
+
+I run **locally** in your environment, have **no memory** between sessions (except NOTES.md you explicitly create), and can only interact with files in the **workspace directory**.
+
+I have:
+- No authentication system
+- No database
+- No networking beyond URL fetching
+- No sandboxing beyond the local directory
+- No multi-agent capabilities (I run as one agent per session)
+- No persistent storage beyond the local filesystem
+- No deployment infrastructure
+
+---
+
+## What I Am Not
+
+I am **not**:
+- A cloud-based IDE platform (like Replit, Vercel, GitPod)
+- An AI coding assistant with memory (like Cursor, Claude Code, GitHub Copilot)
+- A multi-agent orchestration system
+- A platform with built-in AI models
+- A platform with persistent user accounts or state
+- A platform with integration ecosystems (GitHub Actions, etc.)
+
+---
+
+## What You Might Be Thinking Of
+
+You appear to be asking about a hypothetical or future platform — possibly inspired by:
+
+- **Bolt.new / Claude Code / Bolt** — AI-native development environments
+- **Cursor** — AI-first code editor
+- **Replit** — cloud IDE with integrated AI
+- **GitHub Copilot** — AI pair programmer
+- **Windsurf / Lovable** — newer AI coding platforms
+
+But **I do not represent such a platform**. I am a tool that helps you write code locally, file by file, in real-time.
+
+---
+
+## My Actual Capabilities (Limited & Specific)
+
+| Capability | Supported | Notes |
+|------------|-----------|-------|
+| File creation | ✅ | Via `create_file` and `edit_file` |
+| File reading | ✅ | Via `read_file` and `list_files` |
+| Command execution | ✅ | Via `run_command` (within sandbox limits) |
+| Web fetching | ✅ | Via `fetch_url` (read-only, no auth) |
+| Image analysis | ✅ | Via `analyze_image` |
+| Image generation | ✅ | Via `generate_image` (local Stable Diffusion) |
+| Git operations | ⚠️ | Only via `run_command git` — no first-class support |
+| Project scaffolding | ✅ | If commands can do it (e.g., `npx create-vite`) |
+| Running tools | ✅ | If installed in environment (Node, Python, etc.) |
+
+**What I CANNOT do:**
+- Store user state or session memory
+- Execute in the cloud
+- Use API keys (I have none)
+- Manage deployments
+- Run agents concurrently
+- Integrate with GitHub/GitLab/etc. directly (only via CLI if configured)
+- Provide a UI or IDE experience
+- Persist context across sessions (except NOTES.md you create)
+- Handle large codebases efficiently (token limits apply to *your* inputs to me)
+
+---
+
+## So What Should You Do?
+
+If you're building or evaluating a *real* AI-native development platform, I can help you **design its architecture**, **write its implementation**, or **compare it to others** — but I cannot *be* that platform.
+
+For example:
+- If you want to **build** a Forge-like platform with multi-agent support, I can help design the architecture and write the code for its components.
+- If you want to **evaluate** ForgeOS (a different product), you’d need to consult *their* documentation — I can fetch it if you provide a URL.
+- If you want to understand **how local AI agents work**, I can explain the architecture of systems like AutoGen, LangChain agents, or CrewAI.
+
+---
+
+## Let Me Help You
+
+Where would you like to go from here?
+
+1. **Design a ForgeOS-like platform** — I can create architecture diagrams, write component specs, and build starter code.
+2. **Implement the front-end for a local agent system** — I can scaffold a React/Vue app.
+3. **Write a multi-agent orchestration layer** — I can implement agent communication patterns in Python/TypeScript.
+4. **Explain how local AI agents actually work** — I can describe architecture patterns, not hypothetical capabilities.

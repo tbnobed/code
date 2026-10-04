@@ -226,7 +226,7 @@ export default function RuntimePanel({ sessionId, runtime, isLoading, loadError,
 
             <fieldset className="space-y-2 border border-border rounded-sm p-2">
               <legend className="px-1 font-mono text-[10px] font-bold tracking-widest text-muted-foreground flex items-center gap-1"><KeyRound className="w-3 h-3" /> PROJECT ENVIRONMENT</legend>
-              <p className="text-[10px] font-mono text-muted-foreground">Values are write-only and never shown again. A database is not provisioned: set DATABASE_URL to an external database you manage.</p>
+              <p className="text-[10px] font-mono text-muted-foreground">Values are write-only and never shown again. Create a dedicated PostgreSQL database in the Database tab, or set DATABASE_URL for an external database. Restart the runtime after changing its environment.</p>
               {storedKeys.length > 0 && (
                 <ul className="flex flex-wrap gap-1" aria-label="Stored keys">
                   {storedKeys.map((k) => {

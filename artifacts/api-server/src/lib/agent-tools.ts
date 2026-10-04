@@ -5,8 +5,25 @@ import type OpenAI from "openai";
 import { resolveInWorkspace } from "./workspace";
 import { OLLAMA_BASE_URL } from "./ollama";
 import { clampDimension, generateImage, imageGenAvailable } from "./image-gen";
+import { platformCapabilities, platformContext } from "./platform-context";
 
 export const toolDefinitions: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "project_database",
+      description: "Provision this project's own PostgreSQL database, inspect its tables, or execute one SQL statement using its restricted database role. Create injects DATABASE_URL into runtime settings; restart the app to use it. Never put database credentials into source. Get user permission before destructive SQL; database deletion is only available through the Database UI.",
+      parameters: { type: "object", properties: { action: { type: "string", enum: ["status", "create", "query"] }, sql: { type: "string" } }, required: ["action"] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_platform_capabilities",
+      description: "Read ForgeOS platform features, the current requester's GitHub configuration status, model configuration and real limitations. Use when asked what Forge/ForgeOS can do. Does not expose secrets or claim provider health.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
   {
     type: "function",
     function: {
@@ -350,6 +367,17 @@ export async function executeTool(
   const extra = opts?.githubToken ? [opts.githubToken] : [];
   try {
     switch (name) {
+      case "project_database": {
+        const database = await import("./project-database");
+        let result;
+        if (args.action === "status") result = await database.projectDatabaseStatus(workspaceDir);
+        else if (args.action === "create") result = await database.createProjectDatabase(workspaceDir);
+        else if (args.action === "query" && typeof args.sql === "string") result = await database.queryProjectDatabase(workspaceDir, args.sql);
+        else return { result: "Choose status, create or query (with a SQL statement).", isError: true };
+        return { result: JSON.stringify(result), isError: false };
+      }
+      case "get_platform_capabilities":
+        return { result: JSON.stringify(platformCapabilities(Boolean(opts?.githubToken))), isError: false };
       case "manage_runtime": {
         const action = String(args.action);
         if (!["run", "stop", "restart", "install", "build"].includes(action)) return { result: "Invalid runtime action", isError: true };
@@ -647,11 +675,12 @@ export async function executeTool(
           body: JSON.stringify({
             model: ARCHITECT_MODEL,
             stream: false,
+            options: { num_ctx: Number(process.env.OLLAMA_NUM_CTX) > 0 ? Number(process.env.OLLAMA_NUM_CTX) : 32768 },
             messages: [
               {
                 role: "system",
                 content:
-                  "You are a senior software architect advising a coding agent. Give a concrete, actionable answer: a step-by-step plan, a specific diagnosis, or a focused review. Reference the provided files by name. Be direct and keep it under ~600 words. You cannot run tools — reason from what is given.",
+                  "You are a senior software architect advising the Forge coding agent inside ForgeOS. Give a concrete, actionable answer: a step-by-step plan, a specific diagnosis, or a focused review. Reference the provided files by name. Be direct and keep it under ~600 words. You cannot run tools — reason from what is given." + platformContext(Boolean(opts?.githubToken), "architect"),
               },
               {
                 role: "user",

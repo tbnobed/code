@@ -12,6 +12,7 @@ import { runAgentTurn, runArchitectTurn } from "../lib/agent-loop";
 import { stopFrameworkPreview } from "../lib/framework-preview";
 import { forgetRuntime } from "../lib/runtime";
 import { deleteRuntimeConfig } from "../lib/runtime-settings";
+import { hasProjectDatabase } from "../lib/project-database";
 
 /** Turn low-level fetch/socket failures into something the user can act on. */
 function friendlyTurnError(err: unknown): string {
@@ -151,6 +152,10 @@ router.get("/sessions/:id", async (req, res) => {
 router.delete("/sessions/:id", async (req, res) => {
   const session = await getSessionOr404(req, res);
   if (!session) return;
+  if (await hasProjectDatabase(session.workspacePath)) {
+    res.status(409).json({ error: "This project has a managed database. Back it up if needed, then explicitly delete it from the Database tab before deleting the project." });
+    return;
+  }
   forgetRuntime(session.workspacePath);
   await deleteRuntimeConfig(session.workspacePath);
   await db.delete(sessionsTable).where(eq(sessionsTable.id, session.id));

@@ -41,7 +41,9 @@ Add project variables in Runtime settings, e.g. DATABASE_URL for a database you 
 
 Do not rotate SESSION_SECRET without backing up and planning re-entry of project credentials. Framework-prefixed variables intended for client bundles (e.g. VITE_ / NEXT_PUBLIC_) are public by definition; never place secrets in them. Do not put credentials directly into command strings.
 
-This milestone does not provision a database for each project or migrate production databases. It supplies isolated process environment settings for connecting to an existing database.
+The Database tab provisions a separate PostgreSQL database and restricted login for each project, injects DATABASE_URL into its encrypted runtime environment, lists tables and runs single SQL statements. The Forge database administrator must have CREATE DATABASE and CREATE ROLE privileges; the self-hosted Compose PostgreSQL administrator has these by default. Existing external DATABASE_URL values are not overwritten. Restart a running application after provisioning.
+
+Query results are limited to 200 rows/1 MiB, with a five-second statement timeout. Database deletion requires explicit confirmation and stops the project runtime. Projects with a managed database cannot be deleted until their database is explicitly removed. Database contents are not part of filesystem checkpoints or project ZIPs; use PostgreSQL backups before destructive operations. This does not migrate or replace ForgeOS's application database.
 
 ## Limits and security
 

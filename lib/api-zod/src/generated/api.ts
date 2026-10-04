@@ -8,6 +8,76 @@
 import * as zod from 'zod';
 
 
+export const GetProjectDatabaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetProjectDatabaseResponse = zod.object({
+  "provisioned": zod.boolean(),
+  "name": zod.string().optional(),
+  "error": zod.string().optional(),
+  "tables": zod.array(zod.object({
+  "schema": zod.string(),
+  "name": zod.string()
+})).optional()
+})
+
+
+export const CreateProjectDatabaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CreateProjectDatabaseResponse = zod.object({
+  "provisioned": zod.boolean(),
+  "name": zod.string().optional(),
+  "error": zod.string().optional(),
+  "tables": zod.array(zod.object({
+  "schema": zod.string(),
+  "name": zod.string()
+})).optional()
+})
+
+
+export const DeleteProjectDatabaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteProjectDatabaseBody = zod.object({
+  "confirm": zod.literal(true)
+})
+
+export const DeleteProjectDatabaseResponse = zod.object({
+  "provisioned": zod.boolean(),
+  "name": zod.string().optional(),
+  "error": zod.string().optional(),
+  "tables": zod.array(zod.object({
+  "schema": zod.string(),
+  "name": zod.string()
+})).optional()
+})
+
+
+export const QueryProjectDatabaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const queryProjectDatabaseBodySqlMax = 20000;
+
+
+
+export const QueryProjectDatabaseBody = zod.object({
+  "sql": zod.string().min(1).max(queryProjectDatabaseBodySqlMax)
+})
+
+export const QueryProjectDatabaseResponse = zod.object({
+  "columns": zod.array(zod.string()),
+  "rows": zod.array(zod.array(zod.unknown())),
+  "rowCount": zod.number(),
+  "command": zod.string(),
+  "truncated": zod.boolean()
+})
+
+
 export const GetVisualDesignParams = zod.object({
   "id": zod.coerce.number()
 })

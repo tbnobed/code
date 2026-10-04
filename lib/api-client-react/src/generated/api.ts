@@ -23,12 +23,16 @@ import type {
   ApiError,
   Capabilities,
   ChatInput,
+  ConfirmProjectDatabaseDeletion,
   CredentialsBody,
   FilePathInput,
   HealthStatus,
   Message,
   OllamaModel,
   PasswordBody,
+  ProjectDatabaseQueryInput,
+  ProjectDatabaseStatus,
+  QueryProjectDatabase200,
   ReadWorkspaceFileRawParams,
   RuntimeAction,
   RuntimeSettings,
@@ -70,6 +74,274 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetProjectDatabaseUrl = (id: number,) => {
+
+
+
+
+  return `/api/sessions/${id}/database`
+}
+
+export const getProjectDatabase = async (id: number, options?: RequestInit): Promise<ProjectDatabaseStatus> => {
+
+  return customFetch<ProjectDatabaseStatus>(getGetProjectDatabaseUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProjectDatabaseQueryKey = (id: number,) => {
+    return [
+    `/api/sessions/${id}/database`
+    ] as const;
+    }
+
+
+export const getGetProjectDatabaseQueryOptions = <TData = Awaited<ReturnType<typeof getProjectDatabase>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectDatabase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProjectDatabaseQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectDatabase>>> = ({ signal }) => getProjectDatabase(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProjectDatabase>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProjectDatabaseQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectDatabase>>>
+export type GetProjectDatabaseQueryError = ErrorType<unknown>
+
+
+
+export function useGetProjectDatabase<TData = Awaited<ReturnType<typeof getProjectDatabase>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProjectDatabase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProjectDatabaseQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateProjectDatabaseUrl = (id: number,) => {
+
+
+
+
+  return `/api/sessions/${id}/database`
+}
+
+export const createProjectDatabase = async (id: number, options?: RequestInit): Promise<ProjectDatabaseStatus> => {
+
+  return customFetch<ProjectDatabaseStatus>(getCreateProjectDatabaseUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCreateProjectDatabaseMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProjectDatabase>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createProjectDatabase>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['createProjectDatabase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createProjectDatabase>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  createProjectDatabase(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateProjectDatabaseMutationResult = NonNullable<Awaited<ReturnType<typeof createProjectDatabase>>>
+
+    export type CreateProjectDatabaseMutationError = ErrorType<unknown>
+
+    export const useCreateProjectDatabase = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProjectDatabase>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createProjectDatabase>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getCreateProjectDatabaseMutationOptions(options));
+    }
+
+export const getDeleteProjectDatabaseUrl = (id: number,) => {
+
+
+
+
+  return `/api/sessions/${id}/database`
+}
+
+export const deleteProjectDatabase = async (id: number,
+    confirmProjectDatabaseDeletion: ConfirmProjectDatabaseDeletion, options?: RequestInit): Promise<ProjectDatabaseStatus> => {
+
+  return customFetch<ProjectDatabaseStatus>(getDeleteProjectDatabaseUrl(id),
+  {
+    ...options,
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(confirmProjectDatabaseDeletion)
+  }
+);}
+
+
+
+
+
+export const getDeleteProjectDatabaseMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProjectDatabase>>, TError,{id: number;data: BodyType<ConfirmProjectDatabaseDeletion>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteProjectDatabase>>, TError,{id: number;data: BodyType<ConfirmProjectDatabaseDeletion>}, TContext> => {
+
+const mutationKey = ['deleteProjectDatabase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteProjectDatabase>>, {id: number;data: BodyType<ConfirmProjectDatabaseDeletion>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  deleteProjectDatabase(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteProjectDatabaseMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProjectDatabase>>>
+    export type DeleteProjectDatabaseMutationBody = BodyType<ConfirmProjectDatabaseDeletion>
+    export type DeleteProjectDatabaseMutationError = ErrorType<unknown>
+
+    export const useDeleteProjectDatabase = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProjectDatabase>>, TError,{id: number;data: BodyType<ConfirmProjectDatabaseDeletion>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteProjectDatabase>>,
+        TError,
+        {id: number;data: BodyType<ConfirmProjectDatabaseDeletion>},
+        TContext
+      > => {
+      return useMutation(getDeleteProjectDatabaseMutationOptions(options));
+    }
+
+export const getQueryProjectDatabaseUrl = (id: number,) => {
+
+
+
+
+  return `/api/sessions/${id}/database/query`
+}
+
+export const queryProjectDatabase = async (id: number,
+    projectDatabaseQueryInput: ProjectDatabaseQueryInput, options?: RequestInit): Promise<QueryProjectDatabase200> => {
+
+  return customFetch<QueryProjectDatabase200>(getQueryProjectDatabaseUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(projectDatabaseQueryInput)
+  }
+);}
+
+
+
+
+
+export const getQueryProjectDatabaseMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof queryProjectDatabase>>, TError,{id: number;data: BodyType<ProjectDatabaseQueryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof queryProjectDatabase>>, TError,{id: number;data: BodyType<ProjectDatabaseQueryInput>}, TContext> => {
+
+const mutationKey = ['queryProjectDatabase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof queryProjectDatabase>>, {id: number;data: BodyType<ProjectDatabaseQueryInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  queryProjectDatabase(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type QueryProjectDatabaseMutationResult = NonNullable<Awaited<ReturnType<typeof queryProjectDatabase>>>
+    export type QueryProjectDatabaseMutationBody = BodyType<ProjectDatabaseQueryInput>
+    export type QueryProjectDatabaseMutationError = ErrorType<unknown>
+
+    export const useQueryProjectDatabase = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof queryProjectDatabase>>, TError,{id: number;data: BodyType<ProjectDatabaseQueryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof queryProjectDatabase>>,
+        TError,
+        {id: number;data: BodyType<ProjectDatabaseQueryInput>},
+        TContext
+      > => {
+      return useMutation(getQueryProjectDatabaseMutationOptions(options));
+    }
 
 export const getGetVisualDesignUrl = (id: number,) => {
 
