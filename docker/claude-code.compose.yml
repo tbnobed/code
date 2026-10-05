@@ -3,8 +3,9 @@
 services:
   forge:
     environment:
-      AGENT_BACKEND: claude-code
-      CLAUDE_CODE_MODEL: sonnet
+      AGENT_BACKEND: ollama
+      CLAUDE_CODE_REVIEW_ENABLED: "1"
+      CLAUDE_CODE_REVIEW_MODEL: sonnet
       CLAUDE_CODE_SOCKET: /run/forge-claude/bridge.sock
     volumes:
       - ${HOME}/.local/share/forge-claude/bridge:/run/forge-claude:ro

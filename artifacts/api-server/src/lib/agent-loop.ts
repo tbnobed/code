@@ -1,7 +1,7 @@
 import type OpenAI from "openai";
 import { eq, asc, sql } from "drizzle-orm";
 import { db, sessionsTable, messagesTable, type Session } from "@workspace/db";
-import { ollama, OLLAMA_BASE_URL } from "./ollama";
+import { ollama, OLLAMA_BASE_URL, localCodingModel } from "./ollama";
 import { toolDefinitions, executeTool, ARCHITECT_MODEL } from "./agent-tools";
 import { resolveGithubToken } from "./github";
 import { imageGenAvailable } from "./image-gen";
@@ -9,7 +9,6 @@ import { historyCharBudget, trimHistory } from "./context-budget";
 import { readProjectNotes } from "./workspace";
 import { platformContext } from "./platform-context";
 import { CompletionGuard, verifyApplication } from "./agent-verification";
-import { claudeCodeEnabled, claudeCodeStream } from "./claude-code";
 
 const IMAGE_GEN_NOTE =
   "\n- A local image generator is available through the generate_image tool. When the project needs visual assets (logos, icons, hero or background images, textures), generate real ones instead of using placeholders or external URLs.";
@@ -185,11 +184,11 @@ export async function runAgentTurn(
       ];
 
       let stream;
-      send({ type: "status", message: claudeCodeEnabled() ? "Claude Code is working on the next step…" : i === 0 ? "Waiting for the model's first output…" : "Waiting for the model's next step…" });
+      send({ type: "status", message: i === 0 ? "Waiting for the local model's first output…" : "Waiting for the local model's next step…" });
       try {
-        stream = claudeCodeEnabled() ? claudeCodeStream(session.model, requestMessages, toolDefinitions, signal) : await ollama.chat.completions.create(
+        stream = await ollama.chat.completions.create(
           {
-            model: session.model,
+            model: localCodingModel(session.model),
             messages: requestMessages,
             tools: toolDefinitions,
             stream: true,

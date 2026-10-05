@@ -3,9 +3,8 @@ import OpenAI from "openai";
 export const OLLAMA_BASE_URL =
   process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
 
-export const DEFAULT_MODEL = process.env.AGENT_BACKEND === "claude-code"
-  ? `claude-code/${process.env.CLAUDE_CODE_MODEL || "sonnet"}`
-  : process.env.OLLAMA_MODEL ?? "qwen3-coder-next";
+export const DEFAULT_MODEL = process.env.OLLAMA_MODEL || "qwen3-coder-next";
+export const localCodingModel = (model: string) => !model || model.startsWith("claude-code/") ? DEFAULT_MODEL : model;
 
 export const ollama = new OpenAI({
   baseURL: `${OLLAMA_BASE_URL}/v1`,

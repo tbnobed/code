@@ -712,7 +712,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                     {!activeToolCall && (
                       <div className="flex items-center gap-3 text-muted-foreground text-sm font-mono italic">
                         <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                        {isArchitectTurn ? "Architect is thinking..." : isReviewTurn ? "Claude is reviewing this session\u2019s work..." : progressStatus}
+                        {isArchitectTurn ? "Architect is thinking..." : progressStatus}
                         <span className="text-xs tabular-nums">{elapsedSeconds}s elapsed</span>
                       </div>
                     )}
@@ -818,7 +818,8 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                     variant="ghost"
                     size="icon"
                     disabled={isStreaming || isUploading}
-                    title={`Send for review \u2014 ${capabilities.reviewModel ?? "Claude"} audits everything this session changed`}
+                    title="Ask Claude Code for help — local AI sends one compact brief. Only runs when you click; no automatic edits."
+                    aria-label="Ask Claude Code for help"
                     onClick={() => sendReview()}
                     className="h-8 w-8 rounded-sm text-muted-foreground hover:text-primary"
                   >

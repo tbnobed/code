@@ -193,6 +193,18 @@ export async function revertTo(dir: string, hash: string) {
  * empty tree, so both baselines produce identical output. Callers should
  * commit pending manual changes first so the diff includes them.
  */
+export async function diffForHelp(dir: string) {
+  try {
+    const { stdout } = await git(dir, [
+      "show", "HEAD", "--format=", "--no-color", "--no-ext-diff", "--unified=2", "--",
+      ".", ":(exclude)*lock*", ":(exclude).env*", ":(exclude)dist/**", ":(exclude)*.min.js",
+    ], 256_000);
+    return stdout.slice(0, 12_000);
+  } catch {
+    return "[Latest diff unavailable or too large; diagnose from the supplied request and tool evidence. Ask for a specific excerpt if needed.]";
+  }
+}
+
 export async function diffSinceStart(dir: string) {
   let emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"; // sha1 empty tree
   try {

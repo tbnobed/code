@@ -1,26 +1,24 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decodeDecision } from "./claude-code";
-import { claudeCodeStream } from "./claude-code";
+import { boundedBrief, BRIEF_BYTE_LIMIT, requestClaudeHelp } from "./claude-code";
+import { localCodingModel, DEFAULT_MODEL } from "./ollama";
 import http from "node:http";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-const tools = [{ type: "function" as const, function: { name: "read_file", parameters: { type: "object" } } }];
-test("Claude decisions preserve Forge's tool-call contract", () => {
-  const delta = decodeDecision({ content: "Inspecting the file.", tool_calls: [{ name: "read_file", arguments: '{"path":"main.ts"}' }] }, tools);
-  assert.equal(delta.tool_calls[0].function.arguments, '{"path":"main.ts"}');
-  assert.equal(delta.tool_calls[0].index, 0);
-  assert.ok(delta.tool_calls[0].id);
-  assert.equal(decodeDecision({ content: "Hello", tool_calls: [] }, tools).content, "Hello");
-});
-test("malformed or unsupported decisions fail explicitly", () => {
-  for (const value of [null, {}, { content: "", tool_calls: [] }, { content: "", tool_calls: [{ name: "Bash", arguments: "{}" }] },
-    { content: "", tool_calls: [{ name: "read_file", arguments: "null" }] },
-    { content: "", tool_calls: [{ name: "read_file", arguments: "[]" }] }]) {
-    assert.throws(() => decodeDecision(value, tools));
+test("briefs are bounded in bytes, including multibyte content", () => {
+  assert.equal(boundedBrief("  short  "), "short");
+  for (const text of ["x".repeat(20000), "漢".repeat(9000), "😀".repeat(9000)]) {
+    const result = boundedBrief(text);
+    assert.ok(Buffer.byteLength(result) <= BRIEF_BYTE_LIMIT);
+    assert.match(result, /truncated/);
   }
+});
+test("saved Claude coding selections cannot enable automatic Claude use", () => {
+  assert.equal(localCodingModel("claude-code/sonnet"), DEFAULT_MODEL);
+  assert.equal(localCodingModel("claude-code/opus"), DEFAULT_MODEL);
+  assert.equal(localCodingModel("local-model"), "local-model");
 });
 
 test("Unix transport, explicit bridge failure and cancellation", async () => {
@@ -37,22 +35,26 @@ test("Unix transport, explicit bridge failure and cancellation", async () => {
     let input = "";
     req.on("data", c => { input += c; });
     req.on("end", () => {
-      assert.equal(JSON.parse(input).model, "sonnet");
+      const payload = JSON.parse(input);
+      assert.equal(payload.model, "sonnet");
+      assert.equal(req.url, "/review");
+      assert.ok(Buffer.byteLength(payload.brief) <= BRIEF_BYTE_LIMIT);
+      assert.equal(payload.messages, undefined);
+      assert.equal(payload.tools, undefined);
       if (mode === "wait") { requested(); res.on("close", disconnected); return; }
       res.writeHead(mode === "error" ? 502 : 200, { "content-type": "application/json" });
-      res.end(JSON.stringify(mode === "error" ? { error: "Subscription unavailable" } : { content: "Ready", tool_calls: [] }));
+      res.end(JSON.stringify(mode === "error" ? { error: "Subscription unavailable" } : { text: "Ready" }));
     });
   });
   await new Promise<void>(resolve => server.listen(socket, resolve));
   try {
-    for await (const chunk of claudeCodeStream("old-ollama-model", [], tools)) {
-      assert.equal(chunk.choices[0].delta.content, "Ready");
-    }
+    await assert.rejects(requestClaudeHelp(""), /not contacted/);
+    assert.equal(await requestClaudeHelp("x".repeat(50000)), "Ready");
     mode = "error";
-    await assert.rejects(async () => { for await (const _ of claudeCodeStream("claude-code/sonnet", [], tools)) {} }, /Subscription unavailable/);
+    await assert.rejects(requestClaudeHelp("Brief"), /Subscription unavailable/);
     mode = "wait";
     const controller = new AbortController();
-    const pending = (async () => { for await (const _ of claudeCodeStream("claude-code/sonnet", [], tools, controller.signal)) {} })();
+    const pending = requestClaudeHelp("Brief", controller.signal);
     await received;
     controller.abort();
     await assert.rejects(pending, /abort/i);
