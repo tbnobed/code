@@ -7,6 +7,7 @@ import { OLLAMA_BASE_URL } from "./ollama";
 import { clampDimension, generateImage, imageGenAvailable } from "./image-gen";
 import { platformCapabilities, platformContext } from "./platform-context";
 import { searchWeb } from "./web-search";
+import { filePage } from "./file-page";
 import { saveGeneratedImage, imageFingerprint } from "./generated-image-artifact";
 
 export const toolDefinitions: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -71,11 +72,15 @@ export const toolDefinitions: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "read_file",
-      description: "Read the content of a file in the workspace.",
+      description: "Read a numbered page of a workspace file. Use start_line/end_line or offset/limit (1-based lines). Follow the returned next start_line instead of rereading the same page. For a known symbol, use run_command with grep first.",
       parameters: {
         type: "object",
         properties: {
           path: { type: "string", description: "Relative file path within the workspace" },
+          start_line: { type: "integer", minimum: 1 },
+          end_line: { type: "integer", minimum: 1 },
+          offset: { type: "integer", minimum: 1, description: "Alias for start_line; 1-based line number." },
+          limit: { type: "integer", minimum: 1, maximum: 400, description: "Maximum lines; default 200." },
         },
         required: ["path"],
       },
@@ -473,7 +478,7 @@ export async function executeTool(
       case "read_file": {
         const p = await resolveInWorkspace(workspaceDir, String(args.path));
         const content = await fs.readFile(p, "utf8");
-        return { result: sanitize(content, extra), isError: false };
+        return { result: sanitize(filePage(content, args), extra), isError: false };
       }
       case "list_files": {
         const files = await listFilesRecursive(workspaceDir, workspaceDir);
