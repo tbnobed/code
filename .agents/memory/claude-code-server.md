@@ -11,6 +11,12 @@ The user requested Claude Code running on their server instead of attaching thro
 
 The user explicitly approved connecting Forge to Claude Code as its coding backend.
 
+“Claude should not be doing any work until I call on it.”
+
+**Why:** The user explicitly objected to seeing Claude continue working when they had not intended to invoke it.
+
+**How to apply:** Do not launch Claude-driven tests, repair runs, or continuations on the user's behalf without an explicit request. An idle connector may stay available for user-initiated requests, but it must not autonomously start coding work.
+
 **Why:** They want to use the authenticated server CLI through Forge, not merely from a terminal.
 
 **How to apply:** Keep subscription credentials on the host, outside generated projects. Use the CLI for coding decisions while preserving Forge's tool execution, cancellation, checkpoints and independent completion gate; do not silently fall back to Ollama on Claude errors.
