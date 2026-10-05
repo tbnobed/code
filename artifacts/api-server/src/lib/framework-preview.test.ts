@@ -42,3 +42,29 @@ test("detect frameworks and surface missing dependencies without hanging", async
     await fs.rm(dir, { recursive: true, force: true });
   }
 });
+
+test("Vite launcher supports CommonJS default exports without named export detection", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "forge-vite-cjs-"));
+  try {
+    const pkg = path.join(dir, "node_modules/vite");
+    await fs.mkdir(pkg, { recursive: true });
+    await fs.writeFile(path.join(dir, "package.json"), JSON.stringify({ devDependencies: { vite: "5" } }));
+    await fs.writeFile(path.join(pkg, "package.json"), JSON.stringify({ main: "index.cjs" }));
+    // Dynamic exports reproduce the CJS namespace boundary, rather than relying
+    // on Node's heuristic detection of "exports.createServer = ...".
+    await fs.writeFile(path.join(pkg, "index.cjs"), `
+      module.exports = Object.fromEntries([["createServer", async options => ({
+        listen: () => new Promise(resolve => {
+          require("http").createServer((req,res)=>res.end(options.base))
+            .listen(options.server.port, options.server.host, resolve);
+        })
+      })]]);
+    `);
+    const base = "/api/sessions/1/preview/test";
+    const running = await frameworkPreview(dir, "vite", base);
+    assert.equal(await (await fetch("http://127.0.0.1:" + running.port)).text(), base + "/");
+  } finally {
+    stopFrameworkPreview(dir);
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});

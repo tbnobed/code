@@ -8,6 +8,7 @@ import { imageGenAvailable } from "./image-gen";
 import { historyCharBudget, trimHistory } from "./context-budget";
 import { readProjectNotes } from "./workspace";
 import { platformContext } from "./platform-context";
+import { CompletionGuard, verifyApplication } from "./agent-verification";
 
 const IMAGE_GEN_NOTE =
   "\n- A local image generator is available through the generate_image tool. When the project needs visual assets (logos, icons, hero or background images, textures), generate real ones instead of using placeholders or external URLs.";
@@ -17,7 +18,7 @@ const SYSTEM_PROMPT = `You are Forge, the autonomous coding agent built into For
 Guidelines:
 - For online research without a known source URL, call search_web first, then fetch_url on actual returned sources. Prefer official model cards/docs for licenses and requirements. Cite URLs you actually retrieved, separate snippets from verified facts, and never guess ForgeOS documentation domains or claim to have searched when only a URL fetch was attempted. Queries go to public search engines: never include credentials, private source code or confidential project data. If results are irrelevant, refine the query; if search fails, report it rather than fabricating an answer.
 - For logo requests, inspect the real project's brand and header before designing. Do not treat an unrelated screenshot of this IDE as a brand reference. Use editable SVG and deliberate typography for crisp logos where appropriate. Generated images are drafts: inspect the saved output with analyze_image, compare it with the requested subject and branding, and revise failures before integrating or calling it finished. Never label an unchecked image professional. Do not silently substitute SVG if the user explicitly wants an AI-generated image.
-- When a project needs persistent application data, use project_database with action create to provision its dedicated PostgreSQL database, then query to create the schema. DATABASE_URL is injected securely; never write it into source or NOTES.md. Restart an already-running app to pick up the environment. Use status to inspect existing tables. Do not substitute in-memory/mock data for a requested database. Get user confirmation before destructive SQL; table/data changes are not covered by file checkpoints.
+- When a project needs persistent application data, use project_database with action create to provision its dedicated PostgreSQL database. For imported apps, inspect their schema and migration system and use that system; do not invent tables, reset migration history, or silently replace existing data. DATABASE_URL is injected securely; never write it into source or NOTES.md. Restart an already-running app to pick up the environment. Use status to inspect existing tables. Do not substitute in-memory/mock data for a requested database. Get user confirmation before destructive SQL; table/data changes are not covered by file checkpoints.
 - Use your tools to do real work. Create actual files and run actual commands rather than only describing what to do.
 - Work step by step: plan briefly, then execute with tools, then verify (e.g. run the code or list files).
 - File paths are always relative to the workspace root.
@@ -29,6 +30,7 @@ Guidelines:
 - Never restate your plan or repeat text from earlier in the conversation. After a tool result, continue directly from where you left off with the next action.
 - The user can upload files into the workspace root; a note like [Uploaded to the workspace: data.csv] means those files exist — read or use them.
 - Once an application is ready, use manage_runtime with action run, then get_runtime_status until it reports running or an error. Use configure_runtime for custom frontend/backend commands. Use manage_runtime build for production validation; starting a command is not proof it succeeded. Read runtime logs and fix failures before claiming the application works.
+- Before finishing a web-app repair, call verify_runtime. Forge also enforces a signed-preview HTTP check before accepting completion. This checks HTML and entry assets, not browser rendering, login, database correctness, or all features; describe only what was actually tested. A failed check returns evidence for a bounded repair attempt. Inspect the package scripts and server listen() call: full-stack imports may need their own dev/start script rather than Forge's frontend-only Vite launcher. A built server may require NODE_ENV=production via its start script. Attribute errors to the reported startup phase; do not rewrite an app server to mask a Forge launcher failure.
 - fetch_url reads a web page or API as plain text. Use it when the user shares a link or you need documentation or reference material.
 - analyze_image looks at an image file (screenshot, mockup, photo) with a vision model and reports what it shows. Use it BEFORE building UI from an uploaded mockup or screenshot.
 - consult_architect asks a senior architect (a larger reasoning model) for a plan, review, or hard-bug diagnosis. It is slow — reserve it for genuinely difficult decisions or when the user asks for a plan/review, and pass the relevant file paths.
@@ -144,6 +146,28 @@ export async function runAgentTurn(
     Math.max(0, historyCharBudget(OLLAMA_NUM_CTX) - notesBlock.length - githubBlock.length - platformBlock.length);
 
   let newMessageCount = 1; // the user message
+  const completion = new CompletionGuard();
+  let finished = false;
+
+  async function checkCompletion(lastIteration: boolean) {
+    send({ type: "status", message: "Verifying the signed application preview before finishing…" });
+    const evidence = await verifyApplication(session.workspacePath, signal, 150_000, completion.needsRestart);
+    const id = `verify_${Date.now()}`;
+    const calls = [{ id, type: "function", function: { name: "verify_runtime", arguments: "{}" } }];
+    const result = JSON.stringify(evidence);
+    send({ type: "tool_call", name: "verify_runtime", arguments: "{}" });
+    send({ type: "tool_result", name: "verify_runtime", result, isError: !evidence.ok });
+    await db.insert(messagesTable).values([
+      { sessionId: session.id, role: "assistant", content: "", toolCalls: JSON.stringify(calls) },
+      { sessionId: session.id, role: "tool", content: result, toolCallId: id },
+    ]);
+    newMessageCount += 2;
+    messages.push(
+      { role: "assistant", content: null, tool_calls: [{ ...calls[0], type: "function" }] },
+      { role: "tool", content: result, tool_call_id: id },
+    );
+    return { evidence, decision: completion.decide(evidence, lastIteration) };
+  }
 
   try {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
@@ -155,6 +179,7 @@ export async function runAgentTurn(
       const requestMessages = [
         messages[0],
         ...trimHistory(messages.slice(1), historyBudget),
+        ...(completion.feedback ? [{ role: "system" as const, content: completion.feedback }] : []),
       ];
 
       let stream;
@@ -188,7 +213,9 @@ export async function runAgentTurn(
           if (!delta) continue;
           if (delta.content) {
             text += delta.content;
-            send({ type: "text", content: delta.content });
+            // Once changes begin, withhold completion prose until verified.
+            // Tool progress/results still stream; ordinary discussion is unchanged.
+            if (!completion.dirty) send({ type: "text", content: delta.content });
           }
           for (const tc of delta.tool_calls ?? []) {
             // Some Ollama parsers emit every tool call with index 0 (ollama#16212).
@@ -235,7 +262,7 @@ export async function runAgentTurn(
           await db.insert(messagesTable).values({
             sessionId: session.id,
             role: "assistant",
-            content: `${text}\n\n[Stopped by user]`,
+            content: completion.dirty ? "[Stopped by user before completion verification]" : `${text}\n\n[Stopped by user]`,
           });
           newMessageCount++;
         }
@@ -253,6 +280,17 @@ export async function runAgentTurn(
           }))
         : undefined;
 
+      if (!assistantToolCalls && completion.dirty) {
+        const { evidence, decision } = await checkCompletion(i === MAX_ITERATIONS - 1);
+        if (decision === "retry") continue; // Never persist or emit the rejected claim.
+        if (decision === "block") {
+          text = `I could not verify that the application works after the repair attempts. The work is not confirmed complete.\n\nVerification evidence:\n${evidence.summary}`;
+        } else {
+          text += `\n\nVerification: ${evidence.summary}`;
+        }
+      }
+      if (completion.dirty && text) send({ type: "text", content: text });
+
       await db.insert(messagesTable).values({
         sessionId: session.id,
         role: "assistant",
@@ -262,6 +300,7 @@ export async function runAgentTurn(
       newMessageCount++;
 
       if (!assistantToolCalls) {
+        finished = true;
         break; // Model is done — plain text response
       }
 
@@ -307,6 +346,8 @@ export async function runAgentTurn(
           signal,
           { githubToken: ghToken },
         );
+        // Even failed commands may partially modify files.
+        completion.observe(tc.function.name, args, isError);
         send({ type: "tool_result", name: tc.function.name, result, isError });
 
         await db.insert(messagesTable).values({
@@ -321,6 +362,13 @@ export async function runAgentTurn(
       }
 
       if (signal?.aborted) break;
+    }
+    if (!finished && !signal?.aborted) {
+      const verification = completion.dirty ? await checkCompletion(true) : null;
+      const text = `The agent reached its step limit; this task is not confirmed complete.${verification ? `\n\nVerification evidence:\n${verification.evidence.summary}` : ""}`;
+      send({ type: "text", content: text });
+      await db.insert(messagesTable).values({ sessionId: session.id, role: "assistant", content: text });
+      newMessageCount++;
     }
   } finally {
     // Runs even when the turn is stopped or crashes, so counts stay right.

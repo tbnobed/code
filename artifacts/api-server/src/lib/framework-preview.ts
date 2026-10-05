@@ -85,7 +85,9 @@ const port=Number(portText);
     server.on("upgrade",app.getUpgradeHandler());
     server.listen(port,"127.0.0.1");
   }else{
-    const {createServer}=await import(pathToFileURL(req.resolve("vite")).href);
+    const vite=await import(pathToFileURL(req.resolve("vite")).href);
+    const createServer=vite.createServer ?? vite.default?.createServer;
+    if(typeof createServer!=="function") throw new Error("Forge Vite launcher: installed vite exports no createServer function");
     const server=await createServer({root:process.cwd(),base:base+"/",
       server:{host:"127.0.0.1",port,strictPort:true,open:false,hmr:{},
         cors:{origin:"*"},fs:{strict:true,allow:[process.cwd()]}}});

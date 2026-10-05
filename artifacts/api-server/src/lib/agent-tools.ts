@@ -92,7 +92,15 @@ export const toolDefinitions: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "get_runtime_status",
-      description: "Read the managed application's state and redacted server logs to diagnose startup, dependency, or preview errors.",
+      description: "Read runtime state, assigned PORT, startup phase, and latest redacted logs. Starting is not success; distinguish Forge launcher errors from project errors before editing.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "verify_runtime",
+      description: "Wait for startup (up to 150 seconds), then check the actual signed preview HTTP response and local script/style entry assets. Returns evidence, not a browser/feature test. Use before claiming a web app works.",
       parameters: { type: "object", properties: {} },
     },
   },
@@ -400,7 +408,8 @@ export async function executeTool(
         const { makePreviewToken } = await import("../routes/preview");
         await controlRuntime(workspaceDir, action as "run" | "stop" | "restart" | "install" | "build", `/api/sessions/${id}/preview/${makePreviewToken(id)}`);
         const status = await runtimeStatus(workspaceDir);
-        return { result: JSON.stringify({ ...status, previewPath: status.previewPath ? "[active preview]" : "" }), isError: false };
+        const { runtimeToolResult } = await import("./agent-verification");
+        return { result: JSON.stringify(runtimeToolResult(status)), isError: status.state === "error" };
       }
       case "configure_runtime": {
         const { runtimeBusy, stopRuntime } = await import("./runtime");
@@ -415,7 +424,13 @@ export async function executeTool(
       case "get_runtime_status": {
         const { runtimeStatus } = await import("./runtime");
         const status = await runtimeStatus(workspaceDir);
-        return { result: JSON.stringify({ ...status, previewPath: status.previewPath ? "[active preview]" : "" }), isError: false };
+        const { runtimeToolResult } = await import("./agent-verification");
+        return { result: JSON.stringify(runtimeToolResult(status)), isError: status.state === "error" };
+      }
+      case "verify_runtime": {
+        const { verifyApplication } = await import("./agent-verification");
+        const evidence = await verifyApplication(workspaceDir, signal);
+        return { result: JSON.stringify(evidence), isError: !evidence.ok };
       }
       case "create_file": {
         const rel = String(args.path ?? "").trim();

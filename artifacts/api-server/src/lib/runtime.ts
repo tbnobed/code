@@ -15,6 +15,7 @@ type Runtime = {
   generation: number; abort: AbortController; children: ChildProcess[];
   frontend?: Running; port?: number; backendPort?: number; fingerprint?: string;
   touched: number; config: RuntimeConfig; started: number;
+  phase?: string; expectedPort?: number;
 };
 const runtimes = new Map<string, Runtime>();
 const installs = new Map<string, string>();
@@ -44,6 +45,11 @@ export async function runtimeStatus(dir: string) {
     framework: r?.framework || await detectFramework(dir) || "static",
     settings: { command: config.command, backendCommand: config.backendCommand, backendDirectory: config.backendDirectory },
     environmentKeys: Object.keys(config.environment).sort(),
+    diagnostics: {
+      phase: r?.phase || "idle", expectedPort: r?.expectedPort ?? r?.port ?? null,
+      host: "127.0.0.1", nodeEnv: "development",
+      launcher: config.command ? "project-command" : "forge-framework",
+    },
     previewPath: r?.state === "running" ? r.base + "/" : "",
   };
 }
@@ -121,9 +127,11 @@ async function control(dir: string, action: "run" | "stop" | "restart" | "instal
   };
   void (async () => {
     try {
+      r.phase = "dependency-install";
       await install(dir, r, action === "install", log); alive();
       if (action === "install") { r.state = "stopped"; log("\nDependencies installed. Click Run.\n"); return; }
       if (action === "build") {
+        r.phase = "production-build";
         const manifest = JSON.parse(await fs.readFile(path.join(dir, "package.json"), "utf8"));
         if (!manifest.scripts?.build) throw new Error("No build script in package.json.");
         log("\n[build] NODE_ENV=production npm run build\n");
@@ -137,7 +145,8 @@ async function control(dir: string, action: "run" | "stop" | "restart" | "instal
       const env: NodeJS.ProcessEnv = { ...config.environment, NODE_ENV: "development", HOST: "127.0.0.1", BASE_PATH: base, FORGE_PREVIEW_BASE: base };
       const launch = async (command: string, cwd: string) => {
         const port = await allocatePort(); alive();
-        log(`\n[start] ${command}\n`);
+        r.expectedPort = port;
+        log(`\n[start] ${command} (PORT=${port}, HOST=127.0.0.1, NODE_ENV=development)\n`);
         const proc = spawnManaged(command, cwd, { ...env, PORT: String(port) }, r.abort.signal, log);
         r.children.push(proc.child);
         void proc.done.then(() => {
@@ -149,15 +158,18 @@ async function control(dir: string, action: "run" | "stop" | "restart" | "instal
         return port;
       };
       if (config.backendCommand) {
+        r.phase = "project-backend";
         r.backendPort = await launch(config.backendCommand, await resolveInWorkspace(dir, config.backendDirectory));
         env.FORGE_BACKEND_PORT = String(r.backendPort);
       }
-      if (config.command) r.port = await launch(config.command, dir);
+      if (config.command) { r.phase = "project-command"; r.port = await launch(config.command, dir); }
       else if (r.framework === "next" || r.framework === "vite") {
+        r.phase = "forge-framework-launcher";
         r.frontend = await frameworkPreview(dir, r.framework, base, env);
         if (r.abort.signal.aborted) { killProcess(r.frontend.child); return; }
         r.port = r.frontend.port;
       } else {
+        r.phase = "static-entry";
         await fs.access(await resolveInWorkspace(dir, "index.html")).catch(() => { throw new Error("No Next.js, Vite, or index.html found. Configure a custom run command that listens on PORT."); });
       }
       alive(); r.fingerprint = await fingerprint(dir, config);

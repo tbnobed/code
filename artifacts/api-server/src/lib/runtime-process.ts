@@ -59,5 +59,5 @@ export async function waitForPort(port: number, child: ChildProcess, signal: Abo
     if (ready) return;
     await new Promise(resolve => setTimeout(resolve, 500));
   }
-  throw new Error("Server did not listen within 120 seconds. Bind the command to process.env.PORT (and HOST).");
+  throw new Error(`Server did not listen on assigned PORT=${port} at 127.0.0.1 within 120 seconds. Inspect the listen() call and startup logs; use Number(process.env.PORT) and process.env.HOST, not a fixed port. Do not start another server to work around this.`);
 }
