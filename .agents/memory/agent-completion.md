@@ -20,3 +20,9 @@ Investigate tool contracts before attributing repetitive diagnosis entirely to m
 **Why:** An IPAM transcript showed the agent requesting later file ranges while the tool silently ignored pagination and repeatedly returned the beginning. The completion guard prevented a false success but did not prevent the wasted repair budget.
 
 **How to apply:** Test the exact arguments captured in failed transcripts, surface unsupported inputs explicitly, and make truncated output explain how to retrieve the missing portion. Separate truthful completion reporting from actual repair competence.
+
+Preserve exact runtime diagnostics ahead of model-generated summaries in compact external-help briefs.
+
+**Why:** A local agent ignored an assigned-port mismatch, checked a hardcoded port repeatedly, and exhausted its turn. A short but incomplete Claude brief produced speculative cache advice instead of the concrete runtime diagnosis.
+
+**How to apply:** Include current state, assigned port, log-reported ports with an uncertainty label, and the exact error within the existing brief budget. Reject obvious wrong-port HTTP probes during startup/failure before wasting repair steps. Do not confuse an HTTP smoke check with feature completeness.

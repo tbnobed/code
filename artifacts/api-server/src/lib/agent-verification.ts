@@ -3,12 +3,14 @@ import { setTimeout as delay } from "node:timers/promises";
 import { runtimeStatus } from "./runtime";
 import { resolveInWorkspace } from "./workspace";
 import { probeSignedPreview, type PreviewEvidence } from "./preview-verification";
+import { runtimeFacts } from "./runtime-evidence";
 
 export function runtimeToolResult(status: Awaited<ReturnType<typeof runtimeStatus>>) {
   return {
     ...status, previewPath: status.previewPath ? "[active preview]" : "",
     logs: status.logs.slice(-8000),
     logsTruncated: status.logs.length > 8000,
+    runtimeFacts: runtimeFacts(status),
     guidance: status.diagnostics.phase === "forge-framework-launcher" && status.state === "error"
       ? "Failure occurred in Forge's framework launcher. Inspect this stack before rewriting the application's server; report a platform blocker if it cannot be fixed in the workspace."
       : "Use the latest error and assigned PORT to form a diagnosis before editing. Running only means a port opened; verify_runtime checks the signed HTTP preview.",

@@ -490,6 +490,10 @@ export async function executeTool(
         };
       }
       case "run_command": {
+        const { runtimeStatus } = await import("./runtime");
+        const { wrongRuntimeProbe } = await import("./runtime-evidence");
+        const blocked = wrongRuntimeProbe(String(args.command), await runtimeStatus(workspaceDir));
+        if (blocked) return { result: sanitize(blocked, extra), isError: true };
         return await new Promise((resolve) => {
           const child = spawn("/bin/bash", ["-c", String(args.command)], {
             cwd: workspaceDir,
