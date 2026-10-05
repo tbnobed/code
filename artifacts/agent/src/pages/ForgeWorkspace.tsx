@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { generatedImagePreview } from "@/lib/generated-image-preview";
 import { useGetSession, useListWorkspaceFiles, useReadWorkspaceFile, useGetCapabilities, useGetRuntime, getGetRuntimeQueryKey } from "@workspace/api-client-react";
 import DesignPanel from "@/components/forge/DesignPanel";
 import RuntimePanel, { type PreviewBrowserError } from "@/components/forge/RuntimePanel";
@@ -397,19 +398,20 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                   </div>
                   {call.function?.name === "generate_image" && (() => {
                     try {
-                      const imgPath = JSON.parse(call.function?.arguments || "{}").path;
+                      const result = sessionData.messages?.find(m => m.role === "tool" && m.toolCallId === call.id);
+                      const imgPath = generatedImagePreview(result?.content);
                       if (typeof imgPath === "string" && imgPath) {
                         return (
                           <img
                             src={`${import.meta.env.BASE_URL}api/sessions/${sessionId}/file/raw?path=${encodeURIComponent(imgPath)}`}
                             alt={imgPath}
                             className="max-h-64 w-auto m-3 mt-2 border border-border rounded-sm"
-                            onError={(e) => { e.currentTarget.style.display = "none"; }}
+                            onError={(e) => { e.currentTarget.alt = "Saved generation could not be loaded"; }}
                           />
                         );
                       }
-                    } catch { /* unparseable args — skip the thumbnail */ }
-                    return null;
+                    } catch { /* Invalid historical tool metadata. */ }
+                    return <p className="m-3 text-xs text-muted-foreground">No saved image version is available for this generation.</p>;
                   })()}
                 </div>
               ))}
@@ -922,7 +924,7 @@ export default function ForgeWorkspace({ sessionId }: ForgeWorkspaceProps) {
                   <ScrollArea className="h-full">
                     <div className="p-4 flex items-start justify-center bg-background min-h-full">
                       <img
-                        src={`${import.meta.env.BASE_URL}api/sessions/${sessionId}/file/raw?path=${encodeURIComponent(selectedFile)}`}
+                        src={`${import.meta.env.BASE_URL}api/sessions/${sessionId}/file/raw?path=${encodeURIComponent(selectedFile)}&v=${encodeURIComponent(String(sessionData.updatedAt))}`}
                         alt={selectedFile}
                         className="max-w-full h-auto border border-border rounded-sm"
                       />

@@ -7,6 +7,7 @@ import { OLLAMA_BASE_URL } from "./ollama";
 import { clampDimension, generateImage, imageGenAvailable } from "./image-gen";
 import { platformCapabilities, platformContext } from "./platform-context";
 import { searchWeb } from "./web-search";
+import { saveGeneratedImage, imageFingerprint } from "./generated-image-artifact";
 
 export const toolDefinitions: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
@@ -574,10 +575,9 @@ export async function executeTool(
           },
           signal,
         );
-        await fs.mkdir(path.dirname(p), { recursive: true });
-        await fs.writeFile(p, png);
+        const artifact = await saveGeneratedImage(workspaceDir, rel, png);
         return {
-          result: `Generated ${width}x${height} image via ${provider} (${model}) → ${rel} (${Math.max(1, Math.round(png.length / 1024))} KB). Inspect it with analyze_image and check the brief before using it. ${model === "flux2-klein" && args.negative_prompt ? "This distilled model does not apply negative prompts; describe the desired result in the positive prompt." : ""}`,
+          result: `Generated ${width}x${height} image via ${provider} (${model}) → ${rel} (${Math.max(1, Math.round(png.length / 1024))} KB). Inspect the saved version ${artifact.path} with analyze_image and check the brief before using it. ${artifact.identicalToPrevious ? "WARNING: these bytes are identical to the previous output; this is NOT a new design." : ""} ${model === "flux2-klein" && args.negative_prompt ? "This distilled model does not apply negative prompts; describe the desired result in the positive prompt." : ""}\nImage artifact: ${JSON.stringify(artifact)}`,
           isError: false,
         };
       }
@@ -635,10 +635,11 @@ export async function executeTool(
             isError: true,
           };
         }
-        const b64 = (await fs.readFile(p)).toString("base64");
+        const imageBytes = await fs.readFile(p);
+        const b64 = imageBytes.toString("base64");
         const question = String(
           args.question ??
-            "Describe this image in detail: layout, all visible text, colors, and any design elements.",
+            "Describe the visible subject, colors, layout, and whether it looks photographic, illustrated, or abstract. Identify visible defects or uncertainty. Do not judge it against a brief you have not been given.",
         );
         // Ollama's native chat API takes base64 images directly.
         const resp = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
@@ -647,7 +648,8 @@ export async function executeTool(
           body: JSON.stringify({
             model: VISION_MODEL,
             stream: false,
-            messages: [{ role: "user", content: question, images: [b64] }],
+            options: { temperature: 0 },
+            messages: [{ role: "user", content: `Describe only what is visible in the attached pixels. Do not infer a car make/model, materials, readable text, or photorealism from the filename or a requested style. Say when uncertain. ${question}`, images: [b64] }],
           }),
           signal: withTimeout(signal, 180_000),
         });
@@ -664,7 +666,7 @@ export async function executeTool(
         const data = (await resp.json()) as { message?: { content?: string } };
         const answer = data?.message?.content?.trim();
         if (!answer) return { result: "Vision model returned no content", isError: true };
-        return { result: sanitize(`[${VISION_MODEL} looked at ${rel}]\n${answer}`, extra), isError: false };
+        return { result: sanitize(`[${VISION_MODEL} looked at ${rel}; SHA-256 ${imageFingerprint(imageBytes)}]\nVision-model interpretation, not independent proof of quality or brief compliance:\n${answer}`, extra), isError: false };
       }
       case "consult_architect": {
         const question = String(args.question ?? "").trim();

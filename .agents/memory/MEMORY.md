@@ -6,3 +6,4 @@
 - [React hook tests](react-hook-tests.md) — keep React test runtime external to avoid scheduler hangs in bundled Node tests.
 - [DGX web search](dgx-web-search.md) — test result relevance, not just HTTP success; upstream engines can block or ignore multiword queries.
 - [Agent completion](agent-completion.md) — enforce evidence-based completion outside the model; imported app failures are autonomy regressions, not one-off repairs.
+- [Generated-image evidence](image-evidence.md) — image cards and vision analysis must refer to exact saved versions, not mutable output filenames.
