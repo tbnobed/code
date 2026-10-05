@@ -1,0 +1,14 @@
+[Unit]
+Description=Forge private Claude Code CLI bridge
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/code/docker/claude-code-bridge.py
+Restart=on-failure
+RestartSec=3
+Environment=FORGE_UID=1001
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

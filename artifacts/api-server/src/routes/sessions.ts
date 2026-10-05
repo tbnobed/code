@@ -8,6 +8,7 @@ import { makePreviewToken } from "./preview";
 import path from "node:path";
 import { createWorkspace, resolveInWorkspace, languageFromPath } from "../lib/workspace";
 import { DEFAULT_MODEL } from "../lib/ollama";
+import { claudeCodeEnabled, effectiveClaudeModel } from "../lib/claude-code";
 import { runAgentTurn, runArchitectTurn } from "../lib/agent-loop";
 import { stopFrameworkPreview } from "../lib/framework-preview";
 import { forgetRuntime } from "../lib/runtime";
@@ -17,6 +18,9 @@ import { hasProjectDatabase } from "../lib/project-database";
 /** Turn low-level fetch/socket failures into something the user can act on. */
 function friendlyTurnError(err: unknown): string {
   const raw = err instanceof Error ? err.message : "Agent failed";
+  if (claudeCodeEnabled() && /ECONNREFUSED|ECONNRESET|ENOENT|socket|timed out/i.test(raw)) {
+    return "Claude Code is unavailable. Check the host forge-claude-code service and Claude subscription login, then retry. " + raw;
+  }
   if (/fetch failed|ECONNREFUSED|ECONNRESET|socket|terminated|network error|Connection error/i.test(raw)) {
     return (
       "Lost the connection to Ollama mid-turn (" + raw + "). " +
@@ -47,7 +51,7 @@ function serializeSession(s: typeof sessionsTable.$inferSelect, username?: strin
     userId: s.userId,
     ...(username !== undefined ? { username } : {}),
     title: s.title,
-    model: s.model,
+    model: claudeCodeEnabled() ? effectiveClaudeModel(s.model) : s.model,
     workspacePath: s.workspacePath,
     messageCount: s.messageCount,
     githubRepo: s.githubRepo,

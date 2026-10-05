@@ -3,7 +3,7 @@ name: Forge agent decisions
 description: Durable decisions for the Forge local coding-agent app (Ollama, SSE contract, workspace security)
 ---
 
-- No cloud LLM APIs — user explicitly requires local models via Ollama on their DGX Spark (128GB unified memory). Backend uses the `openai` npm package pointed at `${OLLAMA_BASE_URL}/v1` (default `http://localhost:11434`).
+- Initially Ollama-only on the DGX Spark; the user subsequently explicitly approved Claude Code as Forge's coding backend using subscription login, not API-key attachment. See claude-code-server.md. Local architect, vision and image services remain separate.
 - Default model: `qwen3-coder-next` (July 2026 community consensus for DGX Spark agentic coding). Overridable via `OLLAMA_MODEL` env var and per-session model field. User rejected 2025-era models (Qwen2.5-Coder, Devstral) as outdated — always research current models, mind the actual date.
 - SSE chat contract: `data:` lines with JSON `{type: "text"|"thinking"|"tool_call"|"tool_result"|"checkpoint"|"done"|"error", ...}`; `tool_call.arguments` is a JSON **string** (frontend typing expects string). `thinking` is architect-mode reasoning — display-only, never persisted. Chat body flag `architect: true` routes the turn to the reasoning model (no tools). Streaming routes (chat/review/exec) also emit `: hb` SSE comment heartbeats every 10s (defeats idle-connection middleboxes during long silent stretches, e.g. Ollama cold loads); client parsers must only consume `data: ` lines, and new streaming endpoints must keep the heartbeat.
 - Error payloads must be `{ error: string }` per OpenAPI `ApiError` — not `{ message }`.

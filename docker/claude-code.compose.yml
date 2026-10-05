@@ -1,0 +1,10 @@
+# Optional DGX host integration: docker compose -f docker-compose.yml -f docker/claude-code.compose.yml up -d
+# Install/run claude-code-bridge.py as the authenticated host user first.
+services:
+  forge:
+    environment:
+      AGENT_BACKEND: claude-code
+      CLAUDE_CODE_MODEL: sonnet
+      CLAUDE_CODE_SOCKET: /run/forge-claude/bridge.sock
+    volumes:
+      - ${HOME}/.local/share/forge-claude/bridge:/run/forge-claude:ro

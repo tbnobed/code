@@ -25,7 +25,8 @@ export function platformCapabilities(
       hosting: "ForgeOS itself can run on the user's server using Docker Compose. Managed application previews are not independent production deployments.",
     },
     configuration: {
-      codingModel: env.OLLAMA_MODEL || "qwen3-coder-next",
+      codingModel: env.AGENT_BACKEND === "claude-code" ? `claude-code/${env.CLAUDE_CODE_MODEL || "sonnet"}` : env.OLLAMA_MODEL || "qwen3-coder-next",
+      codingBackend: env.AGENT_BACKEND === "claude-code" ? "Authenticated host Claude Code CLI via private Unix socket; subscription-backed hosted inference. Forge executes workspace tools." : "Local Ollama",
       architectModel: env.OLLAMA_ARCHITECT_MODEL || "qwen3-next:80b-a3b-thinking",
       visionModel: env.OLLAMA_VISION_MODEL || "qwen2.5vl",
       imageGenerationConfigured: Boolean(env.IMAGE_GEN_URL?.trim()),

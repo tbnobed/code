@@ -9,6 +9,7 @@ import { historyCharBudget, trimHistory } from "./context-budget";
 import { readProjectNotes } from "./workspace";
 import { platformContext } from "./platform-context";
 import { CompletionGuard, verifyApplication } from "./agent-verification";
+import { claudeCodeEnabled, claudeCodeStream } from "./claude-code";
 
 const IMAGE_GEN_NOTE =
   "\n- A local image generator is available through the generate_image tool. When the project needs visual assets (logos, icons, hero or background images, textures), generate real ones instead of using placeholders or external URLs.";
@@ -184,9 +185,9 @@ export async function runAgentTurn(
       ];
 
       let stream;
-      send({ type: "status", message: i === 0 ? "Waiting for the model's first output…" : "Waiting for the model's next step…" });
+      send({ type: "status", message: claudeCodeEnabled() ? "Claude Code is working on the next step…" : i === 0 ? "Waiting for the model's first output…" : "Waiting for the model's next step…" });
       try {
-        stream = await ollama.chat.completions.create(
+        stream = claudeCodeEnabled() ? claudeCodeStream(session.model, requestMessages, toolDefinitions, signal) : await ollama.chat.completions.create(
           {
             model: session.model,
             messages: requestMessages,

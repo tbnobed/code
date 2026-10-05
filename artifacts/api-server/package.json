@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:claude-code": "esbuild src/lib/claude-code.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/forge-claude-code.test.cjs && node --test /tmp/forge-claude-code.test.cjs",
     "test:file-pages": "esbuild src/lib/file-page.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/forge-file-page.test.cjs && node --test /tmp/forge-file-page.test.cjs",
     "test:image-versions": "esbuild src/lib/generated-image-artifact.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/forge-image-artifact.test.cjs && esbuild ../agent/src/lib/generated-image-preview.test.ts --bundle --platform=node --format=cjs --outfile=/tmp/forge-image-preview.test.cjs && node --test /tmp/forge-image-artifact.test.cjs /tmp/forge-image-preview.test.cjs",
     "test:verification": "esbuild src/lib/preview-verification.test.ts src/lib/agent-verification.test.ts src/lib/agent-completion.integration.test.ts --bundle --platform=node --format=cjs --outdir=/tmp/forge-verification-tests && NODE_ENV=production SESSION_SECRET=forge-disposable-test-secret node --test /tmp/forge-verification-tests/*.js",
